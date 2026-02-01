@@ -32,6 +32,11 @@ interface BookingsListProps {
   dictionary: any
 }
 
+// Helper function to convert digits to Arabic numerals
+const toArabicDigits = (str: string): string => {
+  return str.replace(/\d/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)])
+}
+
 const BookingsList = ({ dictionary }: BookingsListProps) => {
   const { admin } = useAuth()
   const isSuperadmin = admin?.role === 'superadmin'
