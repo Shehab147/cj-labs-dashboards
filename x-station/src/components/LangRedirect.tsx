@@ -11,7 +11,7 @@ const LangRedirect = () => {
   const pathname = usePathname()
 
   // Try to get locale from cookie
-  let locale = i18n.defaultLocale
+  let locale: Locale = i18n.defaultLocale
   if (typeof document !== 'undefined') {
     const cookieLocale = document.cookie
       .split('; ')

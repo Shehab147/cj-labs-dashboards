@@ -27,6 +27,9 @@ import { useAuth } from '@/contexts/authContext'
 import { i18n } from '@configs/i18n'
 import type { Locale } from '@configs/i18n'
 
+// Helper function to convert digits to Arabic numerals
+const toArabicDigits = (str: string): string => str.replace(/\d/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)])
+
 interface BookingsListProps {
   dictionary: any
 }
@@ -462,7 +465,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     // Format numbers based on locale
     const formatNum = (num: number, pad = false) => {
       const str = pad ? num.toString().padStart(2, '0') : num.toString()
-      return isRtl ? str.replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : str
+      return isRtl ? toArabicDigits(str) : str
     }
     
     if (hrs > 0) {
@@ -562,7 +565,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                   <i className={`tabler-door-enter text-white text-2xl ${isRtl ? 'scale-x-[-1]' : ''}`} />
                 </div>
                 <div className={isRtl ? 'text-right' : ''}>
-                  <Typography variant='h5'>{isRtl ? activeBookings.length.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : activeBookings.length}</Typography>
+                  <Typography variant='h5'>{isRtl ? toArabicDigits(activeBookings.length.toString()) : activeBookings.length}</Typography>
                   <Typography variant='body2' color='text.secondary'>
                     {dictionary?.bookings?.activeBookings || 'Active Bookings'}
                   </Typography>
@@ -575,7 +578,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                   <i className='tabler-door text-white text-2xl' />
                 </div>
                 <div className={isRtl ? 'text-right' : ''}>
-                  <Typography variant='h5'>{isRtl ? availableRooms.length.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : availableRooms.length}</Typography>
+                  <Typography variant='h5'>{isRtl ? toArabicDigits(availableRooms.length.toString()) : availableRooms.length}</Typography>
                   <Typography variant='body2' color='text.secondary'>
                     {dictionary?.rooms?.available || 'Available Rooms'}
                   </Typography>
@@ -666,9 +669,9 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                               <Chip
                                 label={typeof duration === 'number' 
                                   ? (duration < 1 
-                                    ? `${isRtl ? Math.round(duration * 60).toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : Math.round(duration * 60)} ${dictionary?.common?.mins || 'mins'}` 
-                                    : `${isRtl ? duration.toFixed(1).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : duration.toFixed(1)} ${dictionary?.common?.hours || 'hrs'}`)
-                                  : `${isRtl ? duration.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : duration} ${dictionary?.common?.hours || 'hrs'}`}
+                                    ? `${isRtl ? toArabicDigits(Math.round(duration * 60).toString()) : Math.round(duration * 60)} ${dictionary?.common?.mins || 'mins'}` 
+                                    : `${isRtl ? toArabicDigits(duration.toFixed(1)) : duration.toFixed(1)} ${dictionary?.common?.hours || 'hrs'}`)
+                                  : `${isRtl ? toArabicDigits(duration.toString()) : duration} ${dictionary?.common?.hours || 'hrs'}`}
                                 color={isActive ? 'warning' : 'default'}
                                 variant={isActive ? 'filled' : 'outlined'}
                                 size='small'
@@ -676,7 +679,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                               {isScheduled && booking.remaining_hours && (
                                 <Typography variant='caption' color='text.secondary' className='block mt-1'>
                                   {isRtl 
-                                    ? `${booking.remaining_hours.toFixed(1).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)])} ${dictionary?.common?.hoursRemaining || 'ساعة متبقية'}`
+                                    ? `${toArabicDigits(booking.remaining_hours.toFixed(1))} ${dictionary?.common?.hoursRemaining || 'ساعة متبقية'}`
                                     : `${booking.remaining_hours.toFixed(1)}h remaining`}
                                 </Typography>
                               )}
@@ -742,7 +745,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                                         />
                                       </div>
                                       <Typography variant='caption' color='text.secondary' className={`block mt-0.5 ${isRtl ? 'text-right' : ''}`}>
-                                        {isRtl ? Math.round(progress).toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : Math.round(progress)}% • {formatTimer(remainingSeconds)} {dictionary?.bookings?.left || 'left'}
+                                        {isRtl ? toArabicDigits(Math.round(progress).toString()) : Math.round(progress)}% • {formatTimer(remainingSeconds)} {dictionary?.bookings?.left || 'left'}
                                       </Typography>
                                     </div>
                                   )
@@ -756,8 +759,8 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                             <td className='p-3'>
                               <Typography variant='body2' fontWeight={500} color='success.main'>
                                 {isActive
-                                  ? `~${isRtl ? booking.estimated_price?.toFixed(2).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : booking.estimated_price?.toFixed(2)}`
-                                  : (isRtl ? (booking.price || booking.total_price || 0).toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : (booking.price || booking.total_price || 0))} {dictionary?.common?.currency || 'EGP'}
+                                  ? `~${isRtl ? toArabicDigits(booking.estimated_price?.toFixed(2) || '0') : booking.estimated_price?.toFixed(2)}`
+                                  : (isRtl ? toArabicDigits((booking.price || booking.total_price || 0).toString()) : (booking.price || booking.total_price || 0))} {dictionary?.common?.currency || 'EGP'}
                               </Typography>
                             </td>
                             <td className='p-3'>
@@ -881,8 +884,8 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                             <td className='p-3'>
                               <Chip
                                 label={Number(duration) < 1 
-                                  ? `${isRtl ? Math.round(Number(duration) * 60).toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : Math.round(Number(duration) * 60)} ${dictionary?.common?.mins || 'mins'}` 
-                                  : `${isRtl ? Number(duration).toFixed(1).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : Number(duration).toFixed(1)} ${dictionary?.common?.hours || 'hrs'}`}
+                                  ? `${isRtl ? toArabicDigits(Math.round(Number(duration) * 60).toString()) : Math.round(Number(duration) * 60)} ${dictionary?.common?.mins || 'mins'}` 
+                                  : `${isRtl ? toArabicDigits(Number(duration).toFixed(1)) : Number(duration).toFixed(1)} ${dictionary?.common?.hours || 'hrs'}`}
                                 color='default'
                                 variant='outlined'
                                 size='small'
@@ -890,7 +893,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                             </td>
                             <td className='p-3'>
                               <Typography variant='body2' fontWeight={500} color='success.main'>
-                                {isRtl ? (booking.price || booking.total_price || 0).toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : (booking.price || booking.total_price || 0)} {dictionary?.common?.currency || 'EGP'}
+                                {isRtl ? toArabicDigits((booking.price || booking.total_price || 0).toString()) : (booking.price || booking.total_price || 0)} {dictionary?.common?.currency || 'EGP'}
                               </Typography>
                             </td>
                             <td className='p-3'>
@@ -935,14 +938,13 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
               {Array.from({ length: 18 }, (_, i) => (i + 1) * 10).map(minutes => {
                 const hours = Math.floor(minutes / 60)
                 const mins = minutes % 60
-                const toArabicNum = (num: number | string) => num.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)])
                 let label = ''
                 if (hours === 0) {
-                  label = `${isRtl ? toArabicNum(minutes) : minutes} ${dictionary?.common?.minutes || 'minutes'}`
+                  label = `${isRtl ? toArabicDigits(minutes.toString()) : minutes} ${dictionary?.common?.minutes || 'minutes'}`
                 } else if (mins === 0) {
-                  label = `${isRtl ? toArabicNum(hours) : hours} ${hours === 1 ? dictionary?.common?.hour || 'hour' : dictionary?.common?.hours || 'hours'}`
+                  label = `${isRtl ? toArabicDigits(hours.toString()) : hours} ${hours === 1 ? dictionary?.common?.hour || 'hour' : dictionary?.common?.hours || 'hours'}`
                 } else {
-                  label = `${isRtl ? toArabicNum(hours) : hours}:${isRtl ? toArabicNum(mins.toString().padStart(2, '0')) : mins.toString().padStart(2, '0')} ${dictionary?.common?.hours || 'hours'}`
+                  label = `${isRtl ? toArabicDigits(hours.toString()) : hours}:${isRtl ? toArabicDigits(mins.toString().padStart(2, '0')) : mins.toString().padStart(2, '0')} ${dictionary?.common?.hours || 'hours'}`
                 }
                 return (
                   <MenuItem key={minutes} value={minutes}>
@@ -966,7 +968,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
             >
               {availableRooms.map(room => (
                 <MenuItem key={room.id} value={room.id}>
-                  {room.name} - {room.ps} ({isRtl ? room.hour_cost.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : room.hour_cost} {dictionary?.common?.currencyPerHour || 'EGP/hr'})
+                  {room.name} - {room.ps} ({isRtl ? toArabicDigits(room.hour_cost.toString()) : room.hour_cost} {dictionary?.common?.currencyPerHour || 'EGP/hr'})
                 </MenuItem>
               ))}
             </CustomTextField>
@@ -1029,12 +1031,12 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                       const minsVal = Math.round(hrs * 60);
                       const hrsVal = hrs.toFixed(1);
                       return hrs < 1 
-                        ? `${isRtl ? minsVal.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : minsVal} ${dictionary?.common?.mins || 'mins'}` 
-                        : `${isRtl ? hrsVal.replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : hrsVal} ${dictionary?.common?.hours || 'hours'}`;
+                        ? `${isRtl ? toArabicDigits(minsVal.toString()) : minsVal} ${dictionary?.common?.mins || 'mins'}` 
+                        : `${isRtl ? toArabicDigits(hrsVal) : hrsVal} ${dictionary?.common?.hours || 'hours'}`;
                     })()}
                   </Typography>
                   <Typography variant='h5' color='success.main' className='mt-2'>
-                    ~{isRtl ? selectedBooking.estimated_price?.toFixed(2).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : selectedBooking.estimated_price?.toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                    ~{isRtl ? toArabicDigits(selectedBooking.estimated_price?.toFixed(2) || '0') : selectedBooking.estimated_price?.toFixed(2)} {dictionary?.common?.currency || 'EGP'}
                   </Typography>
                 </CardContent>
               </Card>
@@ -1070,7 +1072,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
               >
                 {availableRooms.map(room => (
                   <MenuItem key={room.id} value={room.id}>
-                    {room.name} - {room.ps} ({isRtl ? room.hour_cost.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : room.hour_cost} {dictionary?.common?.currencyPerHour || 'EGP/hr'})
+                    {room.name} - {room.ps} ({isRtl ? toArabicDigits(room.hour_cost.toString()) : room.hour_cost} {dictionary?.common?.currencyPerHour || 'EGP/hr'})
                   </MenuItem>
                 ))}
               </CustomTextField>

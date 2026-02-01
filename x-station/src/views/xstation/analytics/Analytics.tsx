@@ -174,7 +174,7 @@ const Analytics = ({ dictionary }: AnalyticsProps) => {
               </CustomAvatar>
               <div className={isRtl ? 'text-right' : ''}>
                 <Typography variant='h5' fontWeight={600}>
-                  {toLocalizedNum(roomData?.summary?.total_bookings || dashboard?.total_room_bookings || 0)}
+                  {toLocalizedNum(roomData?.summary?.total_bookings || dashboard?.total_bookings || 0)}
                 </Typography>
                 <Typography variant='body2' color='text.secondary'>
                   {dictionary?.analytics?.totalBookings || 'Total Bookings'}
@@ -458,7 +458,7 @@ const Analytics = ({ dictionary }: AnalyticsProps) => {
                           {customer.customer_name || customer.name}
                         </Typography>
                         <Typography variant='caption' color='text.secondary'>
-                          {toLocalizedNum(customer.bookings || customer.booking_count)} {dictionary?.navigation?.bookings}
+                          {toLocalizedNum(customer.bookings || customer.booking_count || 0)} {dictionary?.navigation?.bookings}
                         </Typography>
                       </div>
                     </div>

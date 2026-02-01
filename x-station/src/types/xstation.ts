@@ -81,7 +81,7 @@ export interface Room {
   ps: string
   hour_cost: string | number
   capacity: number
-  is_booked: number
+  is_booked: number | string | boolean
 }
 
 export interface RoomWithAnalytics extends Room {
@@ -123,7 +123,10 @@ export interface Booking {
   room_id: number
   started_at: string
   finished_at?: string | null
+  start_time?: string
+  end_time?: string | null
   price?: string | number
+  total_price?: string | number
   room_name: string
   ps: string
   hour_cost: string | number
@@ -254,6 +257,7 @@ export interface FrontDeskDashboard {
   stock_alerts: {
     low_stock_count: number
     items: CafeteriaItem[]
+    low_stock_items?: CafeteriaItem[]
   }
   today: {
     orders_count: number
@@ -398,6 +402,12 @@ export interface CafeteriaAnalytics {
     revenue: number
     profit: number
   }>
+  top_performers?: Array<{
+    id: number
+    name: string
+    total_sold: number
+    total_revenue: string
+  }>
   items?: Array<{
     id: number
     name: string
@@ -428,6 +438,7 @@ export interface CustomerAnalytics {
     phone: string
     orders: number
     bookings: number
+    booking_count?: number
     total_spent: number
     tier: LoyaltyTier
   }>
@@ -460,6 +471,9 @@ export interface RevenueAnalytics {
     booking_revenue: number
     total_profit: number
     profit_margin: number
+    booking_count?: number
+    order_count?: number
+    gross_profit?: number
   }
   // Convenience fields used by Analytics view
   bookings_count?: number

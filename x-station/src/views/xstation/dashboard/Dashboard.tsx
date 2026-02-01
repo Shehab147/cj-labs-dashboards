@@ -161,7 +161,7 @@ const Dashboard = ({ dictionary }: DashboardProps) => {
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <DashboardStatsCard
               title={dictionary?.dashboard?.totalBookings || 'Total Bookings'}
-              stats={String(analyticsData.total_room_bookings || 0)}
+              stats={String(analyticsData.total_bookings || 0)}
               avatarIcon='tabler-calendar'
               avatarColor='primary'
             />

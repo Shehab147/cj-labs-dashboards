@@ -62,28 +62,6 @@ type SearchItemProps = {
   onSelect?: () => void
 }
 
-// Transform the data to group items by their sections
-const transformedData = data.reduce((acc: Section[], item) => {
-  const existingSection = acc.find(section => section.title === item.section)
-
-  const newItem = {
-    id: item.id,
-    name: item.name,
-    url: item.url,
-    excludeLang: item.excludeLang,
-    icon: item.icon,
-    shortcut: item.shortcut
-  }
-
-  if (existingSection) {
-    existingSection.items.push(newItem)
-  } else {
-    acc.push({ title: item.section, items: [newItem] })
-  }
-
-  return acc
-}, [])
-
 // SearchItem Component for introduce the shortcut keys
 const SearchItem = ({ children, shortcut, value, currentPath, url, onSelect = () => {} }: SearchItemProps) => {
   return (

@@ -63,7 +63,7 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
       const response = await roomApi.list()
       if (response.status === 'success') {
         // Convert is_booked string to boolean
-        const roomsData = (response.data || []).map(room => ({
+        const roomsData = (response.data || []).map((room: Room) => ({
           ...room,
           is_booked: room.is_booked === '1' || room.is_booked === 1 || room.is_booked === true
         }))
