@@ -28,9 +28,6 @@ import { i18n } from '@configs/i18n'
 import type { Locale } from '@configs/i18n'
 import { parseServerDateTimeMs, formatLocalTime, formatLocalDate, formatTimerDisplay, getLocaleForRtl, toServerDateTime } from '@/utils/timezone'
 
-// Helper function to convert digits to Arabic numerals
-const toArabicDigits = (str: string): string => str.replace(/\d/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)])
-
 interface BookingsListProps {
   dictionary: any
 }
@@ -741,11 +738,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                                         />
                                       </div>
                                       <Typography variant='caption' color='text.secondary' className={`block mt-0.5 ${isRtl ? 'text-right' : ''}`}>
-<<<<<<< Updated upstream
-                                        {isRtl ? toArabicDigits(Math.round(progress).toString()) : Math.round(progress)}% • {formatTimer(remainingSeconds)} {dictionary?.bookings?.left || 'left'}
-=======
                                         {isRtl ? Math.round(progress).toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : Math.round(progress)}% {dictionary?.bookings?.elapsed || 'elapsed'}
->>>>>>> Stashed changes
                                       </Typography>
                                     </div>
                                   )
