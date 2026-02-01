@@ -28,6 +28,7 @@ import { orderApi, cafeteriaApi, customerApi } from '@/services/api'
 import type { Order, CafeteriaItem, Customer } from '@/types/xstation'
 import CustomTextField from '@core/components/mui/TextField'
 import { i18n } from '@/configs/i18n'
+import { formatLocalTime, formatLocalDate, getLocaleForRtl } from '@/utils/timezone'
 
 interface OrdersListProps {
   dictionary: any
@@ -439,7 +440,7 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
                         </td>
                         <td className='p-3'>
                           <Typography variant='body2'>
-                            {new Date(order.created_at).toLocaleTimeString(isRtl ? 'ar-EG' : 'en-US')}
+                            {formatLocalTime(order.created_at, getLocaleForRtl(isRtl))}
                           </Typography>
                         </td>
                         <td className='p-3'>
@@ -686,10 +687,10 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
                         {dictionary?.orders?.orderDate || 'Order Date'}
                       </Typography>
                       <Typography variant='body1'>
-                        {new Date(selectedOrder.created_at).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                        {formatLocalDate(selectedOrder.created_at, getLocaleForRtl(isRtl))}
                       </Typography>
                       <Typography variant='caption' color='text.secondary'>
-                        {new Date(selectedOrder.created_at).toLocaleTimeString(isRtl ? 'ar-EG' : 'en-US')}
+                        {formatLocalTime(selectedOrder.created_at, getLocaleForRtl(isRtl))}
                       </Typography>
                     </div>
                   </div>

@@ -57,7 +57,7 @@ const themeConfig: Config = {
   templateName: 'X-Station',
   homePageUrl: '/dashboard',
   settingsCookieName: 'x-station-settings',
-  mode: 'system', // 'system', 'light', 'dark'
+  mode: 'light', // 'system', 'light', 'dark'
   skin: 'bordered', // 'default', 'bordered' - Design Language: Border > shadow
   semiDark: false, // true, false
   layout: 'vertical', // 'vertical', 'collapsed', 'horizontal'

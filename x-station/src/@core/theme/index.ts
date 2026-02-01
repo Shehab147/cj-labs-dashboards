@@ -1,5 +1,5 @@
 // Next Imports
-import { Inter } from 'next/font/google'
+import { Inter, Noto_Sans_Arabic } from 'next/font/google'
 
 // MUI Imports
 import type { Theme } from '@mui/material/styles'
@@ -16,10 +16,16 @@ import shadows from './shadows'
 import customShadows from './customShadows'
 import typography from './typography'
 
-// X-Station Design Language: Inter font
+// X-Station Design Language: Inter font for Latin, Noto Sans Arabic for Arabic
 const inter = Inter({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'] })
+const notoSansArabic = Noto_Sans_Arabic({ subsets: ['arabic'], weight: ['300', '400', '500', '600', '700'] })
 
 const theme = (settings: Settings, mode: SystemMode, direction: Theme['direction']): Theme => {
+  // Use Arabic font for RTL direction, Inter for LTR
+  const fontFamily = direction === 'rtl' 
+    ? `${notoSansArabic.style.fontFamily}, ${inter.style.fontFamily}`
+    : inter.style.fontFamily
+
   return {
     direction,
     components: overrides(settings.skin as Skin),
@@ -37,7 +43,7 @@ const theme = (settings: Settings, mode: SystemMode, direction: Theme['direction
       }
     },
     shadows: shadows(mode),
-    typography: typography(inter.style.fontFamily),
+    typography: typography(fontFamily),
     customShadows: customShadows(mode),
     // X-Station Design Language: Pure black for dark mode
     mainColorChannels: {

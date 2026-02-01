@@ -26,6 +26,7 @@ import CustomTextField from '@core/components/mui/TextField'
 import { useAuth } from '@/contexts/authContext'
 import { i18n } from '@configs/i18n'
 import type { Locale } from '@configs/i18n'
+import { parseServerDateTimeMs, formatLocalTime, formatLocalDate, formatTimerDisplay, getLocaleForRtl, toServerDateTime } from '@/utils/timezone'
 
 // Helper function to convert digits to Arabic numerals
 const toArabicDigits = (str: string): string => str.replace(/\d/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)])
@@ -208,7 +209,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
         
         // Priority 1: Use server finished_at if available
         if (booking.finished_at) {
-          const endTime = new Date(booking.finished_at).getTime()
+          const endTime = parseServerDateTimeMs(booking.finished_at)
           const now = Date.now()
           const remaining = Math.max(0, Math.floor((endTime - now) / 1000))
           updated[booking.id] = remaining
@@ -270,7 +271,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
       let shouldEnd = false
       
       if (booking.finished_at) {
-        const endTime = new Date(booking.finished_at).getTime()
+        const endTime = parseServerDateTimeMs(booking.finished_at)
         const now = Date.now()
         shouldEnd = now >= endTime
       } else if (clientTimers[id]) {
@@ -341,8 +342,9 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
         const startTime = new Date()
         const endTime = new Date()
         endTime.setMinutes(endTime.getMinutes() + durationMinutes)
-        startedAt = startTime.toISOString().slice(0, 19).replace('T', ' ') // Format: YYYY-MM-DD HH:MM:SS
-        finishedAt = endTime.toISOString().slice(0, 19).replace('T', ' ') // Format: YYYY-MM-DD HH:MM:SS
+        // Convert to UTC for server (server expects UTC)
+        startedAt = toServerDateTime(startTime)
+        finishedAt = toServerDateTime(endTime)
         clientEndTime = endTime.getTime()
       }
       
@@ -451,9 +453,9 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   }
 
   const formatDuration = (startTime: string, endTime?: string) => {
-    const start = new Date(startTime)
-    const end = endTime ? new Date(endTime) : new Date()
-    const diff = (end.getTime() - start.getTime()) / (1000 * 60 * 60) // hours
+    const start = parseServerDateTimeMs(startTime)
+    const end = endTime ? parseServerDateTimeMs(endTime) : Date.now()
+    const diff = (end - start) / (1000 * 60 * 60) // hours
     return diff.toFixed(1)
   }
 
@@ -474,12 +476,8 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     return `${formatNum(mins)}:${formatNum(secs, true)}`
   }
 
-  // Parse MySQL datetime format properly
-  const parseDateTime = (dateStr: string) => {
-    // MySQL format: "2026-01-30 14:36:11" needs to be converted to "2026-01-30T14:36:11"
-    const normalized = dateStr.replace(' ', 'T')
-    return new Date(normalized).getTime()
-  }
+  // Use centralized timezone utilities for proper UTC to local conversion
+  const parseDateTime = parseServerDateTimeMs
 
   const displayBookings = statusFilter === 'active' ? activeBookings : bookings
 
@@ -659,10 +657,10 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                             </td>
                             <td className='p-3'>
                               <Typography variant='body2'>
-                                {new Date(booking.started_at || booking.start_time).toLocaleTimeString(isRtl ? 'ar-EG' : 'en-US')}
+                                {formatLocalTime(booking.started_at || booking.start_time, getLocaleForRtl(isRtl))}
                               </Typography>
                               <Typography variant='caption' color='text.secondary'>
-                                {new Date(booking.started_at || booking.start_time).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                                {formatLocalDate(booking.started_at || booking.start_time, getLocaleForRtl(isRtl))}
                               </Typography>
                             </td>
                             <td className='p-3'>
@@ -692,10 +690,9 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                                   const endTime = parseDateTime(booking.finished_at)
                                   const totalSeconds = Math.floor((endTime - startTime) / 1000)
                                   
-                                  // Use current_duration_hours from API (same as duration display)
-                                  const elapsedHours = booking.current_duration_hours || booking.elapsed_hours || 0
-                                  const elapsedSeconds = Math.floor(elapsedHours * 3600)
-                                  const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds)
+                                  // Calculate elapsed time dynamically using currentTime for real-time updates
+                                  const elapsedSeconds = Math.floor((currentTime - startTime) / 1000)
+                                  const remainingSeconds = Math.max(0, Math.floor((endTime - currentTime) / 1000))
                                   
                                   // Progress: 0% at start, 100% when time is up
                                   const progress = Math.min(100, Math.max(0, (elapsedSeconds / totalSeconds) * 100))
@@ -727,17 +724,16 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                                     <div className='min-w-[120px]'>
                                       <div className={`flex items-center justify-between mb-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
                                         <Typography variant='caption' fontWeight={600} style={{ color }}>
-                                          {formatTimer(elapsedSeconds)} / {formatTimer(totalSeconds)}
+                                          {formatTimer(remainingSeconds)} {dictionary?.bookings?.left || 'left'}
                                         </Typography>
-                                        <i className={`tabler-clock text-sm`} style={{ color }} />
+                                        <i className={`tabler-clock text-sm ${isAlmostDone ? 'animate-pulse' : ''}`} style={{ color }} />
                                       </div>
                                       <div 
                                         className='w-full h-2 rounded-full overflow-hidden'
                                         style={{ backgroundColor: `${color}20` }}
-                                        dir='ltr'
                                       >
                                         <div
-                                          className='h-full rounded-full transition-all duration-1000 ease-linear'
+                                          className={`h-full rounded-full transition-all duration-300 ease-linear ${isRtl ? 'ml-auto' : ''}`}
                                           style={{ 
                                             width: `${progress}%`,
                                             backgroundColor: color
@@ -745,7 +741,11 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                                         />
                                       </div>
                                       <Typography variant='caption' color='text.secondary' className={`block mt-0.5 ${isRtl ? 'text-right' : ''}`}>
+<<<<<<< Updated upstream
                                         {isRtl ? toArabicDigits(Math.round(progress).toString()) : Math.round(progress)}% • {formatTimer(remainingSeconds)} {dictionary?.bookings?.left || 'left'}
+=======
+                                        {isRtl ? Math.round(progress).toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[parseInt(d)]) : Math.round(progress)}% {dictionary?.bookings?.elapsed || 'elapsed'}
+>>>>>>> Stashed changes
                                       </Typography>
                                     </div>
                                   )
@@ -780,13 +780,20 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                                 </div>
                               )}
                               {isActive && !isPending && booking.finished_at && (
-                                <Chip 
-                                  label={dictionary?.bookings?.timerSet || 'Timer Set'} 
-                                  size='small' 
-                                  color='info' 
-                                  variant='outlined'
-                                  icon={<i className='tabler-clock text-sm' />}
-                                />
+                                <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse justify-end' : ''}`}>
+                                  <Button
+                                    variant='contained'
+                                    color='error'
+                                    size='small'
+                                    onClick={() => {
+                                      setSelectedBooking(booking as ActiveBooking)
+                                      setEndBookingDialogOpen(true)
+                                    }}
+                                  >
+                                    {dictionary?.bookings?.endBooking || 'End'}
+                                  </Button>
+                                 
+                                </div>
                               )}
                               {isPending && (
                                 <Chip label={dictionary?.bookings?.notStarted || 'Not Started'} size='small' color='default' />
@@ -823,7 +830,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
             {(() => {
               const completedBookings = (Array.isArray(bookings) ? bookings : [])
                 .filter(b => b.status === 'completed')
-                .sort((a, b) => new Date(b.finished_at || b.end_time || 0).getTime() - new Date(a.finished_at || a.end_time || 0).getTime())
+                .sort((a, b) => parseServerDateTimeMs(b.finished_at || b.end_time) - parseServerDateTimeMs(a.finished_at || a.end_time))
                 .slice(0, 10)
               
               if (completedBookings.length === 0) {
@@ -873,12 +880,12 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                             </td>
                             <td className='p-3'>
                               <Typography variant='body2'>
-                                {new Date(booking.started_at || booking.start_time).toLocaleTimeString(isRtl ? 'ar-EG' : 'en-US')}
+                                {formatLocalTime(booking.started_at || booking.start_time, getLocaleForRtl(isRtl))}
                               </Typography>
                             </td>
                             <td className='p-3'>
                               <Typography variant='body2'>
-                                {new Date(booking.finished_at || booking.end_time).toLocaleTimeString(isRtl ? 'ar-EG' : 'en-US')}
+                                {formatLocalTime(booking.finished_at || booking.end_time, getLocaleForRtl(isRtl))}
                               </Typography>
                             </td>
                             <td className='p-3'>

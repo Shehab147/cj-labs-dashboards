@@ -6,6 +6,7 @@ import CardContent from '@mui/material/CardContent'
 import Typography from '@mui/material/Typography'
 
 import type { Order } from '@/types/xstation'
+import { formatLocalDate } from '@/utils/timezone'
 
 interface RecentOrdersTableProps {
   orders: Order[]
@@ -48,7 +49,7 @@ const RecentOrdersTable = ({ orders, dictionary }: RecentOrdersTableProps) => {
                     </td>
                     <td className='p-3'>
                       <Typography variant='body2' color='text.secondary'>
-                        {new Date(order.created_at).toLocaleDateString()}
+                        {formatLocalDate(order.created_at)}
                       </Typography>
                     </td>
                   </tr>

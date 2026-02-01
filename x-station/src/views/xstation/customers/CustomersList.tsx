@@ -24,6 +24,7 @@ import CustomTextField from '@core/components/mui/TextField'
 import CustomAvatar from '@core/components/mui/Avatar'
 import { useAuth } from '@/contexts/authContext'
 import { useNotification } from '@/hooks/useNotification'
+import { formatLocalDate } from '@/utils/timezone'
 
 interface CustomersListProps {
   dictionary: any
@@ -502,7 +503,7 @@ const CustomersList = ({ dictionary }: CustomersListProps) => {
                     {dictionary?.common?.createdAt || 'Member Since'}
                   </Typography>
                   <Typography variant='body1'>
-                    {selectedCustomer.created_at ? new Date(selectedCustomer.created_at).toLocaleDateString() : '-'}
+                    {selectedCustomer.created_at ? formatLocalDate(selectedCustomer.created_at) : '-'}
                   </Typography>
                 </div>
               </div>

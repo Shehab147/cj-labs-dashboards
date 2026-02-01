@@ -167,7 +167,7 @@ const UserDropdown = () => {
                       onClick={handleUserLogout}
                       sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
                     >
-                      Logout
+                      Logout - تسجيل خروج
                     </Button>
                   </div>
                 </MenuList>

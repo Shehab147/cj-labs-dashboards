@@ -166,7 +166,10 @@
     "roomsOverview": "نظرة عامة على الغرف",
     "activeSessionsTitle": "الجلسات النشطة",
     "stockAlerts": "تنبيهات المخزون",
-    "todaySummary": "ملخص اليوم"
+    "todaySummary": "ملخص اليوم",
+    "sessionTimers": "مؤقتات الجلسات",
+    "quickAddCustomer": "إضافة عميل سريع",
+    "addAndSelect": "إضافة واختيار"
   },
   "rooms": {
     "title": "الغرف",
@@ -239,7 +242,10 @@
     "switchFromRoom": "التغيير من",
     "bookingAutoEnded": "تم إنهاء الحجز تلقائياً",
     "left": "متبقي",
+    "elapsed": "منقضي",
     "timesUp": "انتهى الوقت!",
+    "remaining": "متبقي",
+    "startedAt": "بدأت في",
     "lastCompletedBookings": "آخر الحجوزات المكتملة",
     "noCompletedBookings": "لا توجد حجوزات مكتملة اليوم",
     "todaysBookings": "حجوزات اليوم",
@@ -278,7 +284,8 @@
     "customerDetails": "تفاصيل العميل",
     "selectCustomer": "اختر عميل",
     "selectedCustomer": "العميل المحدد",
-    "namePhoneRequired": "الاسم ورقم الهاتف مطلوبان"
+    "namePhoneRequired": "الاسم ورقم الهاتف مطلوبان",
+    "searchByNameOrPhone": "البحث بالاسم أو الهاتف"
   },
   "cafeteria": {
     "title": "الكافتيريا",
@@ -505,5 +512,8 @@
     "viewAllBookings": "عرض جميع الحجوزات",
     "markAllRead": "تحديد الكل كمقروء",
     "markAllUnread": "تحديد الكل كغير مقروء"
+  },
+  "timers": {
+    "noActiveTimers": "لا توجد مؤقتات نشطة"
   }
 }

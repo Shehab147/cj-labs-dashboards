@@ -20,6 +20,7 @@ import CustomTextField from '@core/components/mui/TextField'
 import CustomAvatar from '@core/components/mui/Avatar'
 import { useAuth } from '@/contexts/authContext'
 import { i18n } from '@/configs/i18n'
+import { formatLocalDate, getLocaleForRtl, dateFormats } from '@/utils/timezone'
 
 interface AnalyticsProps {
   dictionary: any
@@ -499,10 +500,10 @@ const Analytics = ({ dictionary }: AnalyticsProps) => {
                     {roomData.daily_breakdown.slice(dailyPage * rowsPerPage, dailyPage * rowsPerPage + rowsPerPage).map((day, index) => (
                       <tr key={index} className='border-b last:border-0'>
                         <td className='p-2'>
-                          <Typography variant='body2'>{isRtl ? new Date(day.date).toLocaleDateString('ar-EG') : day.date}</Typography>
+                          <Typography variant='body2'>{formatLocalDate(day.date, getLocaleForRtl(isRtl))}</Typography>
                         </td>
                         <td className='p-2'>
-                          <Typography variant='body2'>{isRtl ? new Date(day.date).toLocaleDateString('ar-EG', { weekday: 'long' }) : day.day_name}</Typography>
+                          <Typography variant='body2'>{formatLocalDate(day.date, getLocaleForRtl(isRtl), { weekday: 'long' })}</Typography>
                         </td>
                         <td className='p-2'>
                           <Typography variant='body2'>{toLocalizedNum(day.booking_count)}</Typography>

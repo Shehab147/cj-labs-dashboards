@@ -26,6 +26,7 @@ import { frontDeskApi, roomApi, bookingApi, customerApi, cafeteriaApi, orderApi 
 import type { FrontDeskDashboard, Room, Customer, CafeteriaItem, ActiveBooking } from '@/types/xstation'
 import CustomTextField from '@core/components/mui/TextField'
 import CustomAvatar from '@core/components/mui/Avatar'
+import { parseServerDateTimeMs, formatLocalTime, formatTimerDisplay, toServerDateTime } from '@/utils/timezone'
 
 interface FrontDeskProps {
   dictionary: any
@@ -36,6 +37,7 @@ interface QuickBookingData {
   customer_id?: number
   customer_phone: string
   customer_name: string
+  duration_minutes: number // 0 = open-ended, 10-180 minutes
 }
 
 interface OrderItemData {
@@ -73,7 +75,8 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
   const [bookingData, setBookingData] = useState<QuickBookingData>({
     room_id: 0,
     customer_phone: '',
-    customer_name: ''
+    customer_name: '',
+    duration_minutes: 0 // 0 = open-ended
   })
   const [selectedBookingCustomer, setSelectedBookingCustomer] = useState<Customer | null>(null)
 
@@ -106,15 +109,22 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
   const fetchData = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setIsLoading(true)
-      const [dashboardRes, roomsRes, itemsRes, customersRes] = await Promise.all([
+      const [dashboardRes, roomsRes, itemsRes, customersRes, activeBookingsRes] = await Promise.all([
         frontDeskApi.getDashboard(),
         roomApi.getAvailable(),
         cafeteriaApi.getAvailable(),
-        customerApi.getAll()
+        customerApi.getAll(),
+        bookingApi.getActive()
       ])
 
       if (dashboardRes.status === 'success') {
-        setData(dashboardRes.data)
+        // Use active bookings from the dedicated endpoint to ensure we get both
+        // open sessions and scheduled bookings that are currently active
+        const dashboardData = dashboardRes.data
+        if (activeBookingsRes.status === 'success' && activeBookingsRes.data) {
+          dashboardData.active_bookings = activeBookingsRes.data
+        }
+        setData(dashboardData)
       }
       if (roomsRes.status === 'success') {
         setAvailableRooms(roomsRes.data || [])
@@ -151,23 +161,9 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
     }
   }, [])
 
-  // Helper function to parse MySQL datetime format
-  const parseDateTime = (dateStr: string) => {
-    const normalized = dateStr.replace(' ', 'T')
-    return new Date(normalized).getTime()
-  }
-
-  // Helper function to format timer display
-  const formatTimer = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600)
-    const mins = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-    
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    }
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
+  // Use centralized timezone utilities for proper UTC to local conversion
+  const parseDateTime = parseServerDateTimeMs
+  const formatTimer = formatTimerDisplay
 
   // Keyboard shortcuts for quick actions
   useEffect(() => {
@@ -309,16 +305,33 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
 
     try {
       setIsSubmitting(true)
+      
+      const durationMinutes = bookingData.duration_minutes
+      
+      // Calculate started_at and finished_at if duration is set
+      let startedAt = null
+      let finishedAt = null
+      if (durationMinutes > 0) {
+        const startTime = new Date()
+        const endTime = new Date()
+        endTime.setMinutes(endTime.getMinutes() + durationMinutes)
+        // Convert to UTC for server (server expects UTC)
+        startedAt = toServerDateTime(startTime)
+        finishedAt = toServerDateTime(endTime)
+      }
+      
       const response = await bookingApi.quickStart({
         room_id: bookingData.room_id,
         customer_phone: selectedBookingCustomer.phone,
-        customer_name: selectedBookingCustomer.name || undefined
+        customer_name: selectedBookingCustomer.name || undefined,
+        ...(startedAt && { started_at: startedAt }),
+        ...(finishedAt && { finished_at: finishedAt })
       })
 
       if (response.status === 'success') {
         setSuccessMessage(dictionary?.bookings?.bookingStarted || 'Booking started successfully')
         setBookingDialogOpen(false)
-        setBookingData({ room_id: 0, customer_phone: '', customer_name: '' })
+        setBookingData({ room_id: 0, customer_phone: '', customer_name: '', duration_minutes: 0 })
         setSelectedBookingCustomer(null)
         fetchData()
       } else {
@@ -684,10 +697,10 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
                             </div>
                             <div className='flex justify-between'>
                               <Typography variant='caption' color='text.secondary'>
-                                {new Date(booking.started_at).toLocaleTimeString()}
+                                {formatLocalTime(booking.started_at)}
                               </Typography>
                               <Typography variant='caption' color='text.secondary'>
-                                {new Date(booking.finished_at).toLocaleTimeString()}
+                                {formatLocalTime(booking.finished_at)}
                               </Typography>
                             </div>
                           </div>
@@ -702,7 +715,7 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
                           </Typography>
                         </div>
                         <Typography variant='caption' color='text.secondary'>
-                          {dictionary?.bookings?.startedAt || 'Started at'}: {new Date(booking.started_at).toLocaleTimeString()}
+                          {dictionary?.bookings?.startedAt || 'Started at'}: {formatLocalTime(booking.started_at)}
                         </Typography>
                       </div>
                     )}
@@ -930,11 +943,49 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
           <div className='flex flex-col gap-4 pt-2'>
             <CustomTextField
               select
+              label={dictionary?.bookings?.selectDuration || 'Select Duration'}
+              value={bookingData.duration_minutes}
+              onChange={e => setBookingData({ ...bookingData, duration_minutes: Number(e.target.value) })}
+              fullWidth
+              helperText={dictionary?.bookings?.durationHelperText || 'Select a timer or leave open-ended'}
+            >
+              <MenuItem value={0}>
+                <div className='flex items-center gap-2'>
+                  <i className='tabler-infinity' />
+                  {dictionary?.bookings?.openEnded || 'Open-ended (no timer)'}
+                </div>
+              </MenuItem>
+              {/* Generate time options from 10 min to 3 hours in 10 min increments */}
+              {Array.from({ length: 18 }, (_, i) => (i + 1) * 10).map(minutes => {
+                const hours = Math.floor(minutes / 60)
+                const mins = minutes % 60
+                let label = ''
+                if (hours === 0) {
+                  label = `${minutes} ${dictionary?.common?.minutes || 'minutes'}`
+                } else if (mins === 0) {
+                  label = `${hours} ${hours === 1 ? dictionary?.common?.hour || 'hour' : dictionary?.common?.hours || 'hours'}`
+                } else {
+                  label = `${hours}:${mins.toString().padStart(2, '0')} ${dictionary?.common?.hours || 'hours'}`
+                }
+                return (
+                  <MenuItem key={minutes} value={minutes}>
+                    <div className='flex items-center gap-2'>
+                      <i className='tabler-clock' />
+                      {label}
+                    </div>
+                  </MenuItem>
+                )
+              })}
+            </CustomTextField>
+
+            <CustomTextField
+              select
               label={dictionary?.bookings?.selectRoom || 'Select Room'}
               value={bookingData.room_id}
               onChange={e => setBookingData({ ...bookingData, room_id: Number(e.target.value) })}
               fullWidth
               required
+              helperText={dictionary?.bookings?.onlyAvailableRooms || 'Only currently available rooms'}
             >
               {availableRooms.map(room => (
                 <MenuItem key={room.id} value={room.id}>

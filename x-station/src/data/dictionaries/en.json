@@ -153,7 +153,10 @@
     "roomsOverview": "Rooms Overview",
     "activeSessionsTitle": "Active Sessions",
     "stockAlerts": "Stock Alerts",
-    "todaySummary": "Today's Summary"
+    "todaySummary": "Today's Summary",
+    "sessionTimers": "Session Timers",
+    "quickAddCustomer": "Quick Add Customer",
+    "addAndSelect": "Add & Select"
   },
   "rooms": {
     "title": "Rooms",
@@ -208,7 +211,15 @@
     "bookingCancelled": "Booking cancelled successfully",
     "roomSwitched": "Room switched successfully",
     "confirmCancel": "Are you sure you want to cancel this booking?",
-    "confirmEnd": "Are you sure you want to end this booking?"
+    "confirmEnd": "Are you sure you want to end this booking?",
+    "timer": "Timer",
+    "remaining": "remaining",
+    "elapsed": "elapsed",
+    "startedAt": "Started at",
+    "left": "left",
+    "timesUp": "Time's up!",
+    "openEnded": "Open",
+    "price": "Price"
   },
   "customers": {
     "title": "Customers",
@@ -243,7 +254,8 @@
     "customerDetails": "Customer Details",
     "selectCustomer": "Select Customer",
     "selectedCustomer": "Selected Customer",
-    "namePhoneRequired": "Name and phone are required"
+    "namePhoneRequired": "Name and phone are required",
+    "searchByNameOrPhone": "Search by name or phone"
   },
   "cafeteria": {
     "title": "Cafeteria",
@@ -467,5 +479,8 @@
     "viewAllBookings": "View All Bookings",
     "markAllRead": "Mark all as read",
     "markAllUnread": "Mark all as unread"
+  },
+  "timers": {
+    "noActiveTimers": "No active timers"
   }
 }

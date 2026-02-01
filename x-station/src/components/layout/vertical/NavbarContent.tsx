@@ -6,7 +6,6 @@ import NavToggle from './NavToggle'
 import NavSearch from '@components/layout/shared/search'
 import LanguageDropdown from '@components/layout/shared/LanguageDropdown'
 import ModeDropdown from '@components/layout/shared/ModeDropdown'
-import BookingNotifications from '@components/layout/shared/BookingNotifications'
 import UserDropdown from '@components/layout/shared/UserDropdown'
 
 // Util Imports
@@ -22,7 +21,6 @@ const NavbarContent = () => {
       <div className='flex items-center'>
         <LanguageDropdown />
         <ModeDropdown />
-        <BookingNotifications />
         <UserDropdown />
       </div>
     </div>

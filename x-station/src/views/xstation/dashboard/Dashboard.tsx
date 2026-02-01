@@ -14,6 +14,7 @@ import { analyticsApi, frontDeskApi } from '@/services/api'
 import type { FrontDeskDashboard, DashboardAnalytics } from '@/types/xstation'
 import { useAuth } from '@/contexts/authContext'
 import CustomAvatar from '@core/components/mui/Avatar'
+import { formatLocalTime } from '@/utils/timezone'
 
 // Components
 import DashboardStatsCard from './DashboardStatsCard'
@@ -307,7 +308,7 @@ const Dashboard = ({ dictionary }: DashboardProps) => {
                         </td>
                         <td className='p-3'>
                           <Typography variant='body2' color='text.secondary'>
-                            {new Date(booking.finished_at).toLocaleTimeString()}
+                            {formatLocalTime(booking.finished_at)}
                           </Typography>
                         </td>
                       </tr>
