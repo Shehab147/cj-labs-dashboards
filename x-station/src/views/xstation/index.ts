@@ -1,0 +1,10 @@
+// Export all xstation views
+export * from './dashboard'
+export * from './frontdesk'
+export * from './rooms'
+export * from './bookings'
+export * from './customers'
+export * from './cafeteria'
+export * from './orders'
+export * from './admins'
+export * from './analytics'
