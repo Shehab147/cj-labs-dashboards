@@ -22,7 +22,7 @@ import { authApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
 
 interface UserProfilePageProps {
-  dictionary: any
+  dictionary?: any
 }
 
 const UserProfilePage = ({ dictionary }: UserProfilePageProps) => {
