@@ -11,7 +11,7 @@ git clone https://username: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@github.com/S
 
 cd /apps/cj-labs-dashboards/x-station
 
-npm install
+npm install --legacy-peer-deps
 npm run build
 
 pm2 restart x-station || pm2 start npm --name x-station -- run start
