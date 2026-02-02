@@ -57,6 +57,8 @@ const LoginIllustration = styled('img')(({ theme }) => ({
   maxBlockSize: 680,
   maxInlineSize: '100%',
   margin: theme.spacing(12),
+  border: '4px solid #8B4513',
+  borderRadius: '15px',
   [theme.breakpoints.down(1536)]: {
     maxBlockSize: 550
   },
@@ -165,7 +167,7 @@ const Login = ({ mode, dictionary }: Props) => {
           }
         )}
       >
-        <LoginIllustration src={characterIllustration} alt='character-illustration' />
+        <LoginIllustration src='/xstation.jpeg' alt='character-illustration' />
         {!hidden && <MaskImg alt='mask' src={authBackground} />}
       </div>
       <div className='flex justify-center items-center bs-full bg-backgroundPaper !min-is-full p-6 md:!min-is-[unset] md:p-12 md:is-[480px]'>
