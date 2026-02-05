@@ -635,24 +635,18 @@ ${ordersHtml}
 </body>
 </html>`
 
-    // Use pywebview print API if available
+    // Use pywebview direct print API if available, otherwise fallback to browser print
     const pywebview = typeof window !== 'undefined' ? (window as any).pywebview : null
     
-    if (pywebview?.api?.print_html) {
-      pywebview.api.print_html(receiptContent)
+    if (pywebview?.api?.print_html_direct) {
+      pywebview.api.print_html_direct(receiptContent)
     } else {
-      // Fallback: Create a new window for printing
+      // Fallback for browser: open print dialog
       const printWindow = window.open('', '_blank', 'width=400,height=600')
       if (printWindow) {
         printWindow.document.write(receiptContent)
         printWindow.document.close()
-        printWindow.onload = () => {
-          printWindow.print()
-        }
-        // Trigger print after a short delay as fallback
-        setTimeout(() => {
-          printWindow.print()
-        }, 500)
+        setTimeout(() => printWindow.print(), 300)
       }
     }
   }
