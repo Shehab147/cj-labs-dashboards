@@ -612,6 +612,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     const startTimeLabel = dictionary?.bookings?.startTime || 'Start Time'
     const endTimeLabel = dictionary?.bookings?.endTime || 'End Time'
     const durationLabel = dictionary?.bookings?.duration || 'Duration'
+    const roomDurationLabel = dictionary?.bookings?.roomDuration || 'Room Duration'
     const roomCostLabel = dictionary?.bookings?.roomCost || 'Room Cost'
     const ordersLabel = dictionary?.navigation?.orders || 'Orders'
     const itemLabel = dictionary?.orders?.item || 'Item'
@@ -699,7 +700,7 @@ body { font-family: "Courier New", monospace; padding: 10mm; max-width: 80mm; ma
 <div class="info-row"><span>${phoneLabel}:</span><span>${booking.customer_phone || '-'}</span></div>
 </div>
 <div class="room-section">
-<div class="section-title">${roomLabel} ${durationLabel}</div>
+<div class="section-title">${roomDurationLabel}</div>
 <div class="info-row"><span>${startTimeLabel}:</span><span>${startTime}</span></div>
 <div class="info-row"><span>${endTimeLabel}:</span><span>${endTime}</span></div>
 <div class="info-row"><span>${durationLabel}:</span><span>${durationText}</span></div>
@@ -719,14 +720,36 @@ ${ordersHtml}
 <p>${thankYouLabel}</p>
 <p style="margin-top: 5px;">${new Date().toLocaleDateString(getLocaleForRtl(isRtl))}</p>
 </div>
-<script>window.onload = function() { window.print(); }</script>
 </body>
 </html>`
 
-    const printWindow = window.open('', '_blank', 'width=400,height=600')
-    if (printWindow) {
-      printWindow.document.write(receiptContent)
-      printWindow.document.close()
+    // Use pywebview print API if available, otherwise fall back to iframe printing
+    if (typeof window !== 'undefined' && (window as any).pywebview?.api?.print_html) {
+      (window as any).pywebview.api.print_html(receiptContent)
+    } else {
+      // Fallback: Create a hidden iframe for printing
+      const printFrame = document.createElement('iframe')
+      printFrame.style.position = 'absolute'
+      printFrame.style.top = '-9999px'
+      printFrame.style.left = '-9999px'
+      printFrame.style.width = '0'
+      printFrame.style.height = '0'
+      document.body.appendChild(printFrame)
+      
+      const frameDoc = printFrame.contentWindow?.document
+      if (frameDoc) {
+        frameDoc.open()
+        frameDoc.write(receiptContent)
+        frameDoc.close()
+        
+        printFrame.contentWindow?.focus()
+        printFrame.contentWindow?.print()
+        
+        // Remove iframe after printing
+        setTimeout(() => {
+          document.body.removeChild(printFrame)
+        }, 1000)
+      }
     }
   }
 
