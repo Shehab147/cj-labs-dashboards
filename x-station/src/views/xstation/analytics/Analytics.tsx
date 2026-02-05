@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
 import MenuItem from '@mui/material/MenuItem'
 import LinearProgress from '@mui/material/LinearProgress'
 import TablePagination from '@mui/material/TablePagination'
@@ -119,13 +120,16 @@ const Analytics = ({ dictionary }: AnalyticsProps) => {
 
   return (
     <Grid container spacing={6} dir={isRtl ? 'rtl' : 'ltr'}>
-      {error && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='error' onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={5000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert severity='error' onClose={() => setError(null)} variant='filled'>
+          {error}
+        </Alert>
+      </Snackbar>
 
       {/* Header */}
       <Grid size={{ xs: 12 }}>

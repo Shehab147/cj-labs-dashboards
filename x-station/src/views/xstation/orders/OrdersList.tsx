@@ -12,6 +12,7 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -24,8 +25,8 @@ import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import Pagination from '@mui/material/Pagination'
 
-import { orderApi, cafeteriaApi, customerApi } from '@/services/api'
-import type { Order, CafeteriaItem, Customer } from '@/types/xstation'
+import { orderApi, cafeteriaApi, customerApi, bookingApi } from '@/services/api'
+import type { Order, CafeteriaItem, Customer, ActiveBooking } from '@/types/xstation'
 import CustomTextField from '@core/components/mui/TextField'
 import { i18n } from '@/configs/i18n'
 import { formatLocalTime, formatLocalDate, getLocaleForRtl } from '@/utils/timezone'
@@ -57,6 +58,7 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
   const [availableItems, setAvailableItems] = useState<CafeteriaItem[]>([])
   const [lowStockItems, setLowStockItems] = useState<CafeteriaItem[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [activeBookings, setActiveBookings] = useState<ActiveBooking[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -78,7 +80,8 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
 
   // New order form
   const [orderData, setOrderData] = useState({
-    customer_id: '' as string | number,
+    customer_id: 'walk-in' as string | number,
+    booking_id: 0, // 0 = no booking linked
     items: [] as OrderItem[]
   })
   const [orderTab, setOrderTab] = useState(0)
@@ -95,11 +98,12 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
       // Determine which orders API to call based on date filter
       const ordersApiCall = dateFilter === 'today' ? orderApi.getTodays() : orderApi.getAll()
       
-      const [ordersRes, itemsRes, customersRes, lowStockRes] = await Promise.all([
+      const [ordersRes, itemsRes, customersRes, lowStockRes, activeBookingsRes] = await Promise.all([
         ordersApiCall,
         cafeteriaApi.getAvailable(),
         customerApi.getAll(),
-        cafeteriaApi.getLowStock()
+        cafeteriaApi.getLowStock(),
+        bookingApi.getActive()
       ])
 
       if (ordersRes.status === 'success') {
@@ -116,6 +120,9 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
       if (customersRes.status === 'success') {
         setCustomers(customersRes.data || [])
       }
+      if (activeBookingsRes.status === 'success') {
+        setActiveBookings(activeBookingsRes.data as ActiveBooking[] || [])
+      }
     } catch (err) {
       setError(dictionary?.errors?.networkError)
     } finally {
@@ -127,46 +134,51 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
     fetchData()
   }, [fetchData])
 
-  const handleCreateOrder = async () => {
+  const handleCreateOrder = async (shouldPrint: boolean = false) => {
     if (orderData.items.length === 0) {
       setError(dictionary?.orders?.addItemsFirst || 'Please add items to the order')
       return
     }
 
-    if (!orderData.customer_id) {
-      setError(dictionary?.orders?.selectCustomerFirst || 'Please select a customer')
-      return
-    }
-
-    console.log('Debug - orderData.customer_id:', orderData.customer_id, typeof orderData.customer_id)
-    console.log('Debug - customers array:', customers)
-    console.log('Debug - selectedCustomer:', selectedCustomer)
-
-    if (!selectedCustomer) {
-      setError(`Customer not found. customer_id: ${orderData.customer_id}. Please select a customer again.`)
-      return
-    }
-
-    if (!selectedCustomer.phone || !selectedCustomer.name) {
-      setError('Customer data is incomplete. Please select a valid customer.')
-      return
-    }
+    // Use selected customer or default "Walk-in Customer" data
+    const isWalkIn = orderData.customer_id === 'walk-in' || !orderData.customer_id
+    const customerName = isWalkIn ? (dictionary?.orders?.walkInCustomer || 'Walk-in Customer') : (selectedCustomer?.name || 'Walk-in Customer')
+    const customerPhone = isWalkIn ? '0000000000' : (selectedCustomer?.phone || '0000000000')
 
     try {
       setIsSubmitting(true)
       const response = await orderApi.quick({
-        customer_phone: selectedCustomer.phone,
-        customer_name: selectedCustomer.name,
+        customer_phone: customerPhone,
+        customer_name: customerName,
         items: orderData.items.map(item => ({
           item_id: item.item_id,
           quantity: item.quantity
-        }))
+        })),
+        ...(orderData.booking_id > 0 && { booking_id: orderData.booking_id })
       })
 
       if (response.status === 'success') {
         setSuccessMessage(dictionary?.orders?.orderCreated || 'Order created successfully')
+        
+        // Print receipt if requested
+        if (shouldPrint && response.data) {
+          const newOrder = response.data
+          printReceipt({
+            id: newOrder.id,
+            customer_name: customerName,
+            customer_phone: customerPhone,
+            items: orderData.items.map(item => ({
+              ...item,
+              item_name: item.name,
+              total_price: item.price * item.quantity
+            })),
+            total_amount: orderTotal,
+            created_at: newOrder.created_at || new Date().toISOString()
+          })
+        }
+        
         setNewOrderDialogOpen(false)
-        setOrderData({ customer_id: '', items: [] })
+        setOrderData({ customer_id: 'walk-in', booking_id: 0, items: [] })
         fetchData()
       } else {
         setError(response.message || dictionary?.errors?.somethingWentWrong)
@@ -249,6 +261,101 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
     }
   }
 
+  // Print receipt function
+  const printReceipt = (order: Order | { id: number; customer_name: string; customer_phone: string; items: any[]; total_amount: number; created_at: string }) => {
+    const itemsHtml = 'items' in order && Array.isArray(order.items) 
+      ? order.items.map((item: any) => {
+          const name = item.item_name || item.name
+          const qty = item.quantity
+          const price = Number(item.total_price || item.price * item.quantity).toFixed(2)
+          return `<div class="item"><span class="item-name">${name}</span><span class="item-qty">x${qty}</span><span class="item-price">${price}</span></div>`
+        }).join('') 
+      : ''
+    
+    const dir = isRtl ? 'rtl' : 'ltr'
+    const priceAlign = isRtl ? 'left' : 'right'
+    const orderLabel = dictionary?.orders?.orderId || 'Order'
+    const dateLabel = dictionary?.common?.date || 'Date'
+    const timeLabel = dictionary?.common?.time || 'Time'
+    const customerLabel = dictionary?.orders?.customer || 'Customer'
+    const phoneLabel = dictionary?.customers?.phoneNumber || 'Phone'
+    const itemLabel = dictionary?.orders?.item || 'Item'
+    const qtyLabel = dictionary?.orders?.quantity || 'Qty'
+    const priceLabel = dictionary?.common?.price || 'Price'
+    const totalLabel = dictionary?.orders?.total || 'Total'
+    const thankYouLabel = dictionary?.orders?.thankYou || 'Thank you for your order!'
+    const currency = dictionary?.common?.currency || 'EGP'
+    const receiptLabel = dictionary?.orders?.receipt || 'Receipt'
+    const totalAmount = Number('total_amount' in order ? order.total_amount : 0).toFixed(2)
+    const orderDate = formatLocalDate(order.created_at, getLocaleForRtl(isRtl))
+    const orderTime = formatLocalTime(order.created_at, getLocaleForRtl(isRtl))
+    const todayDate = new Date().toLocaleDateString(getLocaleForRtl(isRtl))
+    
+    const receiptContent = `<!DOCTYPE html>
+<html dir="${dir}">
+<head>
+<meta charset="UTF-8">
+<title>${receiptLabel} #${order.id}</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Courier New", monospace; padding: 10mm; max-width: 80mm; margin: 0 auto; font-size: 12px; direction: ${dir}; }
+.header { text-align: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #000; }
+.header h1 { font-size: 18px; margin-bottom: 5px; }
+.header p { font-size: 10px; color: #666; }
+.info { margin: 10px 0; font-size: 11px; }
+.info-row { display: flex; justify-content: space-between; margin: 3px 0; }
+.items { margin: 10px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; }
+.item { display: flex; justify-content: space-between; margin: 5px 0; font-size: 11px; }
+.item-name { flex: 1; }
+.item-qty { width: 30px; text-align: center; }
+.item-price { width: 60px; text-align: ${priceAlign}; }
+.total { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #000; }
+.total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: bold; margin: 5px 0; }
+.footer { margin-top: 15px; text-align: center; font-size: 10px; color: #666; }
+@media print { body { padding: 0; } @page { size: 80mm auto; margin: 5mm; } }
+</style>
+</head>
+<body>
+<div class="header">
+<h1>X-Station</h1>
+<p>${receiptLabel}</p>
+</div>
+<div class="info">
+<div class="info-row"><span>${orderLabel}:</span><span>#${order.id}</span></div>
+<div class="info-row"><span>${dateLabel}:</span><span>${orderDate}</span></div>
+<div class="info-row"><span>${timeLabel}:</span><span>${orderTime}</span></div>
+<div class="info-row"><span>${customerLabel}:</span><span>${order.customer_name}</span></div>
+<div class="info-row"><span>${phoneLabel}:</span><span>${order.customer_phone}</span></div>
+</div>
+<div class="items">
+<div class="item" style="font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 5px;">
+<span class="item-name">${itemLabel}</span>
+<span class="item-qty">${qtyLabel}</span>
+<span class="item-price">${priceLabel}</span>
+</div>
+${itemsHtml}
+</div>
+<div class="total">
+<div class="total-row">
+<span>${totalLabel}:</span>
+<span>${totalAmount} ${currency}</span>
+</div>
+</div>
+<div class="footer">
+<p>${thankYouLabel}</p>
+<p style="margin-top: 5px;">${todayDate}</p>
+</div>
+<script>window.onload = function() { window.print(); }</script>
+</body>
+</html>`
+
+    const printWindow = window.open('', '_blank', 'width=400,height=600')
+    if (printWindow) {
+      printWindow.document.write(receiptContent)
+      printWindow.document.close()
+    }
+  }
+
   // Filter orders (API already handles date filtering)
   const filteredOrders = orders.filter(order => {
     if (statusFilter !== 'all' && order.status !== statusFilter) return false
@@ -275,21 +382,43 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
 
   return (
     <Grid container spacing={6} dir={isRtl ? 'rtl' : 'ltr'}>
-      {error && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='error' onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={5000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert 
+          severity='error' 
+          onClose={() => setError(null)}
+          variant='filled'
+          sx={{ 
+            overflow: 'hidden',
+            '& .MuiAlert-message': { overflow: 'hidden', textOverflow: 'ellipsis' }
+          }}
+        >
+          {error}
+        </Alert>
+      </Snackbar>
 
-      {successMessage && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='success' onClose={() => setSuccessMessage(null)}>
-            {successMessage}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={5000}
+        onClose={() => setSuccessMessage(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert 
+          severity='success' 
+          onClose={() => setSuccessMessage(null)}
+          variant='filled'
+          sx={{ 
+            overflow: 'hidden',
+            '& .MuiAlert-message': { overflow: 'hidden', textOverflow: 'ellipsis' }
+          }}
+        >
+          {successMessage}
+        </Alert>
+      </Snackbar>
 
       {/* Header */}
       <Grid size={{ xs: 12 }}>
@@ -451,10 +580,17 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
                                 setSelectedOrder(order)
                                 setViewOrderDialogOpen(true)
                               }}
+                              title={dictionary?.orders?.viewOrder || 'View Order'}
                             >
                               <i className='tabler-eye' />
                             </IconButton>
-                           
+                            <IconButton
+                              size='small'
+                              onClick={() => printReceipt(order)}
+                              title={dictionary?.orders?.printReceipt || 'Print Receipt'}
+                            >
+                              <i className='tabler-printer' />
+                            </IconButton>
                           </div>
                         </td>
                       </tr>
@@ -513,6 +649,44 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
         <DialogTitle dir={isRtl ? 'rtl' : 'ltr'}>{dictionary?.orders?.newOrder || 'New Order'}</DialogTitle>
         <DialogContent dir={isRtl ? 'rtl' : 'ltr'}>
           <div className='flex flex-col gap-4 pt-2'>
+            {/* Link to Active Booking (Optional) */}
+            {activeBookings.length > 0 && (
+              <CustomTextField
+                select
+                label={dictionary?.orders?.linkToBooking || 'Link to Active Booking'}
+                value={orderData.booking_id}
+                onChange={e => {
+                  const bookingId = Number(e.target.value)
+                  const selectedBooking = activeBookings.find(b => b.id === bookingId)
+                  setOrderData({ 
+                    ...orderData, 
+                    booking_id: bookingId,
+                    // Auto-fill customer if booking has one
+                    customer_id: selectedBooking?.customer_name && selectedBooking.customer_name !== 'Guest' 
+                      ? (customers.find(c => c.name === selectedBooking.customer_name)?.id || 'walk-in')
+                      : orderData.customer_id
+                  })
+                }}
+                fullWidth
+                helperText={dictionary?.orders?.linkToBookingHelp || 'Optional: Add this order to an active room session'}
+              >
+                <MenuItem value={0}>
+                  <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <i className='tabler-unlink' />
+                    {dictionary?.orders?.noBookingLink || 'No booking (standalone order)'}
+                  </div>
+                </MenuItem>
+                {activeBookings.map(booking => (
+                  <MenuItem key={booking.id} value={booking.id}>
+                    <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <i className='tabler-door' />
+                      {booking.room_name} - {booking.customer_name || dictionary?.bookings?.guestCustomer || 'Guest'}
+                    </div>
+                  </MenuItem>
+                ))}
+              </CustomTextField>
+            )}
+
             <CustomTextField
               select
               label={dictionary?.customers?.selectCustomer || 'Select Customer'}
@@ -521,10 +695,12 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
                 setOrderData({ ...orderData, customer_id: e.target.value })
               }}
               fullWidth
-              required
             >
-              <MenuItem value=''>
-                <em>{dictionary?.common?.selectOption || 'Select a customer'}</em>
+              <MenuItem value='walk-in'>
+                <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <i className='tabler-user-question' />
+                  {dictionary?.orders?.walkInCustomer || 'Walk-in Customer'}
+                </div>
               </MenuItem>
               {customers.map(customer => (
                 <MenuItem key={customer.id} value={customer.id}>
@@ -639,19 +815,31 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
             </Box>
           </div>
         </DialogContent>
-        <DialogActions sx={{ flexDirection: isRtl ? 'row-reverse' : 'row' }}>
+        <DialogActions sx={{ flexDirection: isRtl ? 'row-reverse' : 'row', gap: 1 }}>
           <Button onClick={() => setNewOrderDialogOpen(false)} disabled={isSubmitting}>
             {dictionary?.common?.cancel || 'Cancel'}
           </Button>
           <Button
-            variant='contained'
-            onClick={handleCreateOrder}
-            disabled={isSubmitting || orderData.items.length === 0 || !orderData.customer_id}
+            variant='outlined'
+            onClick={() => handleCreateOrder(false)}
+            disabled={isSubmitting || orderData.items.length === 0}
           >
             {isSubmitting ? (
               <CircularProgress size={20} />
             ) : (
-              `${dictionary?.orders?.addOrder || 'Create Order'} (${toLocalizedNum(orderTotal.toFixed(2))} ${dictionary?.common?.currency || 'EGP'})`
+              dictionary?.orders?.createOrder || 'Create Order'
+            )}
+          </Button>
+          <Button
+            variant='contained'
+            startIcon={<i className='tabler-printer' />}
+            onClick={() => handleCreateOrder(true)}
+            disabled={isSubmitting || orderData.items.length === 0}
+          >
+            {isSubmitting ? (
+              <CircularProgress size={20} />
+            ) : (
+              `${dictionary?.orders?.createAndPrint || 'Create & Print'} (${toLocalizedNum(orderTotal.toFixed(2))} ${dictionary?.common?.currency || 'EGP'})`
             )}
           </Button>
         </DialogActions>
@@ -808,6 +996,15 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
           <Button onClick={() => setViewOrderDialogOpen(false)}>
             {dictionary?.common?.close || 'Close'}
           </Button>
+          {selectedOrder && (
+            <Button
+              variant='contained'
+              startIcon={<i className='tabler-printer' />}
+              onClick={() => printReceipt(selectedOrder)}
+            >
+              {dictionary?.orders?.printReceipt || 'Print Receipt'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Grid>

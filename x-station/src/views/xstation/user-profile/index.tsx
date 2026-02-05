@@ -11,6 +11,7 @@ import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
 import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
 import Avatar from '@mui/material/Avatar'
 import Divider from '@mui/material/Divider'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -130,13 +131,16 @@ const UserProfilePage = ({ dictionary }: UserProfilePageProps) => {
         </Card>
       </Grid>
 
-      {message && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity={message.type} onClose={() => setMessage(null)}>
-            {message.text}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!message}
+        autoHideDuration={5000}
+        onClose={() => setMessage(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert severity={message?.type || 'info'} onClose={() => setMessage(null)} variant='filled'>
+          {message?.text}
+        </Alert>
+      </Snackbar>
 
       {/* Profile Information (Read Only) */}
       <Grid size={{ xs: 12, md: 6 }}>

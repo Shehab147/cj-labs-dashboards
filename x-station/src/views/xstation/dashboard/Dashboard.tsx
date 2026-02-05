@@ -19,7 +19,6 @@ import { formatLocalTime } from '@/utils/timezone'
 // Components
 import DashboardStatsCard from './DashboardStatsCard'
 import RoomsOverview from './RoomsOverview'
-import ActiveBookingsCard from './ActiveBookingsCard'
 import RecentOrdersTable from './RecentOrdersTable'
 import LowStockAlert from './LowStockAlert'
 
@@ -194,14 +193,6 @@ const Dashboard = ({ dictionary }: DashboardProps) => {
       <Grid size={{ xs: 12, md: 4 }}>
         <LowStockAlert
           items={frontDeskData?.stock_alerts?.items || []}
-          dictionary={dictionary}
-        />
-      </Grid>
-
-      {/* Active Bookings */}
-      <Grid size={{ xs: 12, md: 6 }}>
-        <ActiveBookingsCard
-          bookings={frontDeskData?.active_bookings || []}
           dictionary={dictionary}
         />
       </Grid>

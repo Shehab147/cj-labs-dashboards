@@ -11,6 +11,7 @@ import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -183,21 +184,27 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
 
   return (
     <Grid container spacing={6}>
-      {error && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='error' onClose={clearError}>
-            {error}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={5000}
+        onClose={clearError}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert severity='error' onClose={clearError} variant='filled'>
+          {error}
+        </Alert>
+      </Snackbar>
       
-      {successMessage && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='success' onClose={clearSuccess}>
-            {successMessage}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={5000}
+        onClose={clearSuccess}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert severity='success' onClose={clearSuccess} variant='filled'>
+          {successMessage}
+        </Alert>
+      </Snackbar>
 
       <Grid size={{ xs: 12 }}>
         <Card>

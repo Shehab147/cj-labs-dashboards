@@ -11,6 +11,7 @@ import Chip from '@mui/material/Chip'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -20,8 +21,13 @@ import InputAdornment from '@mui/material/InputAdornment'
 import Autocomplete from '@mui/material/Autocomplete'
 import TablePagination from '@mui/material/TablePagination'
 
-import { bookingApi, roomApi, customerApi } from '@/services/api'
-import type { Booking, Room, ActiveBooking, Customer } from '@/types/xstation'
+import { bookingApi, roomApi, customerApi, cafeteriaApi, orderApi } from '@/services/api'
+import type { Booking, Room, ActiveBooking, Customer, CafeteriaItem } from '@/types/xstation'
+import Tabs from '@mui/material/Tabs'
+import Tab from '@mui/material/Tab'
+import Box from '@mui/material/Box'
+import Divider from '@mui/material/Divider'
+import IconButton from '@mui/material/IconButton'
 import CustomTextField from '@core/components/mui/TextField'
 import { useAuth } from '@/contexts/authContext'
 import { i18n } from '@configs/i18n'
@@ -30,6 +36,13 @@ import { parseServerDateTimeMs, formatLocalTime, formatLocalDate, formatTimerDis
 
 interface BookingsListProps {
   dictionary: any
+}
+
+interface OrderItem {
+  item_id: number
+  name: string
+  price: number
+  quantity: number
 }
 
 // Helper function to convert digits to Arabic numerals
@@ -73,10 +86,21 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   // Form states
   const [newBooking, setNewBooking] = useState({
     room_id: 0,
-    customer_id: 0,
+    customer_id: -1, // -1 = Guest (default)
     duration_minutes: 0 // 0 = open-ended, 30, 60, 90 minutes
   })
   const [newRoomId, setNewRoomId] = useState(0)
+
+  // Order Dialog states
+  const [addOrderDialogOpen, setAddOrderDialogOpen] = useState(false)
+  const [selectedBookingForOrder, setSelectedBookingForOrder] = useState<ActiveBooking | null>(null)
+  const [availableItems, setAvailableItems] = useState<CafeteriaItem[]>([])
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([])
+  const [orderTab, setOrderTab] = useState(0)
+
+  // View Orders Dialog states
+  const [viewOrdersDialogOpen, setViewOrdersDialogOpen] = useState(false)
+  const [selectedBookingOrders, setSelectedBookingOrders] = useState<any>(null)
 
   // Timer states for countdown (now based on server finished_at)
   const [timers, setTimers] = useState<{ [bookingId: number]: number }>({}) // remaining seconds
@@ -123,7 +147,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     try {
       if (showLoading) setIsLoading(true)
       const [bookingsRes, activeRes, availableRoomsRes, allRoomsRes, customersRes] = await Promise.all([
-        bookingApi.getTodays(),
+        bookingApi.getAll(),
         bookingApi.getActive(),
         roomApi.getAvailable(),
         roomApi.list(),
@@ -331,8 +355,12 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   const handleStartBooking = async () => {
     try {
       setIsSubmitting(true)
-      const selectedCustomer = customers.find(c => c.id === newBooking.customer_id)
-      if (!selectedCustomer) return
+      const isGuest = newBooking.customer_id === -1 || newBooking.customer_id === 0
+      const selectedCustomer = isGuest ? null : customers.find(c => c.id === newBooking.customer_id)
+      
+      // Use selected customer or default "Guest" data
+      const customerName = isGuest ? (dictionary?.bookings?.guestCustomer || 'Guest') : (selectedCustomer?.name || 'Guest')
+      const customerPhone = isGuest ? '0000000000' : (selectedCustomer?.phone || '0000000000')
 
       const durationMinutes = newBooking.duration_minutes
       
@@ -353,8 +381,8 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
       // Use quickStart with started_at and finished_at if timed booking
       const response = await bookingApi.quickStart({
         room_id: newBooking.room_id,
-        customer_phone: selectedCustomer.phone,
-        customer_name: selectedCustomer.name || undefined,
+        customer_phone: customerPhone,
+        customer_name: customerName,
         ...(startedAt && { started_at: startedAt }),
         ...(finishedAt && { finished_at: finishedAt })
       })
@@ -371,7 +399,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
         
         setSuccessMessage(dictionary?.bookings?.bookingStarted || 'Booking started successfully')
         setStartBookingDialogOpen(false)
-        setNewBooking({ room_id: 0, customer_id: 0, duration_minutes: 0 })
+        setNewBooking({ room_id: 0, customer_id: -1, duration_minutes: 0 })
         fetchData()
       } else {
         setError(response.message || dictionary?.errors?.somethingWentWrong)
@@ -441,6 +469,91 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     }
   }
 
+  // Fetch cafeteria items for order dialog
+  const fetchCafeteriaItems = useCallback(async () => {
+    try {
+      const response = await cafeteriaApi.getAvailable()
+      if (response.status === 'success') {
+        setAvailableItems(response.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch cafeteria items:', err)
+    }
+  }, [])
+
+  // Open add order dialog
+  const handleOpenAddOrder = (booking: ActiveBooking) => {
+    setSelectedBookingForOrder(booking)
+    setOrderItems([])
+    setOrderTab(0)
+    fetchCafeteriaItems()
+    setAddOrderDialogOpen(true)
+  }
+
+  // Add item to order
+  const addItemToOrder = (item: CafeteriaItem) => {
+    const existingItem = orderItems.find(i => i.item_id === item.id)
+    if (existingItem) {
+      setOrderItems(orderItems.map(i =>
+        i.item_id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+      ))
+    } else {
+      setOrderItems([
+        ...orderItems,
+        { item_id: item.id, name: item.name, price: Number(item.price), quantity: 1 }
+      ])
+    }
+  }
+
+  // Update item quantity
+  const updateItemQuantity = (itemId: number, quantity: number) => {
+    if (quantity <= 0) {
+      setOrderItems(orderItems.filter(i => i.item_id !== itemId))
+    } else {
+      setOrderItems(orderItems.map(i =>
+        i.item_id === itemId ? { ...i, quantity } : i
+      ))
+    }
+  }
+
+  // Calculate order total
+  const orderTotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+  // Create order linked to booking
+  const handleCreateBookingOrder = async () => {
+    if (!selectedBookingForOrder || orderItems.length === 0) {
+      setError(dictionary?.orders?.addItemsFirst || 'Please add items to the order')
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      const response = await orderApi.quick({
+        customer_phone: selectedBookingForOrder.customer_phone || '0000000000',
+        customer_name: selectedBookingForOrder.customer_name || (dictionary?.bookings?.guestCustomer || 'Guest'),
+        items: orderItems.map(item => ({
+          item_id: item.item_id,
+          quantity: item.quantity
+        })),
+        booking_id: selectedBookingForOrder.id
+      })
+
+      if (response.status === 'success') {
+        setSuccessMessage(dictionary?.orders?.orderCreated || 'Order created successfully')
+        setAddOrderDialogOpen(false)
+        setSelectedBookingForOrder(null)
+        setOrderItems([])
+        fetchData()
+      } else {
+        setError(response.message || dictionary?.errors?.somethingWentWrong)
+      }
+    } catch (err) {
+      setError(dictionary?.errors?.networkError)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
@@ -478,6 +591,145 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     return `${formatNum(mins)}:${formatNum(secs, true)}`
   }
 
+  // Print booking receipt with room hours and orders
+  const printBookingReceipt = (booking: any) => {
+    const dir = isRtl ? 'rtl' : 'ltr'
+    const duration = formatDuration(booking.started_at || booking.start_time, booking.finished_at || booking.end_time)
+    const durationText = Number(duration) < 1 
+      ? `${Math.round(Number(duration) * 60)} ${dictionary?.common?.mins || 'mins'}`
+      : `${Number(duration).toFixed(1)} ${dictionary?.common?.hours || 'hrs'}`
+    
+    const roomPrice = Number(booking.price || booking.total_price || 0)
+    const ordersTotal = Number(booking.orders_total || 0)
+    const grandTotal = roomPrice + ordersTotal
+    
+    // Labels
+    const receiptLabel = dictionary?.orders?.receipt || 'Receipt'
+    const bookingLabel = dictionary?.navigation?.bookings || 'Booking'
+    const roomLabel = dictionary?.bookings?.room || 'Room'
+    const customerLabel = dictionary?.bookings?.customer || 'Customer'
+    const phoneLabel = dictionary?.customers?.phoneNumber || 'Phone'
+    const startTimeLabel = dictionary?.bookings?.startTime || 'Start Time'
+    const endTimeLabel = dictionary?.bookings?.endTime || 'End Time'
+    const durationLabel = dictionary?.bookings?.duration || 'Duration'
+    const roomCostLabel = dictionary?.bookings?.roomCost || 'Room Cost'
+    const ordersLabel = dictionary?.navigation?.orders || 'Orders'
+    const itemLabel = dictionary?.orders?.item || 'Item'
+    const qtyLabel = dictionary?.orders?.quantity || 'Qty'
+    const priceLabel = dictionary?.common?.price || 'Price'
+    const subtotalLabel = dictionary?.orders?.subtotal || 'Subtotal'
+    const totalLabel = dictionary?.orders?.total || 'Total'
+    const thankYouLabel = dictionary?.orders?.thankYou || 'Thank you!'
+    const currency = dictionary?.common?.currency || 'EGP'
+    
+    const startTime = formatLocalTime(booking.started_at || booking.start_time, getLocaleForRtl(isRtl))
+    const endTime = formatLocalTime(booking.finished_at || booking.end_time, getLocaleForRtl(isRtl))
+    const bookingDate = formatLocalDate(booking.started_at || booking.start_time, getLocaleForRtl(isRtl))
+    
+    // Build orders HTML
+    let ordersHtml = ''
+    if (booking.orders && booking.orders.length > 0) {
+      ordersHtml = `
+        <div class="orders-section">
+          <div class="section-title">${ordersLabel}</div>
+          ${booking.orders.map((order: any) => `
+            <div class="order-block">
+              <div class="order-header">#${order.id} - ${formatLocalTime(order.created_at, getLocaleForRtl(isRtl))}</div>
+              ${order.items?.map((item: any) => `
+                <div class="item">
+                  <span class="item-name">${item.item_name || item.name}</span>
+                  <span class="item-qty">x${item.quantity || 1}</span>
+                  <span class="item-price">${Number(item.total_price || item.unit_price * item.quantity || 0).toFixed(2)}</span>
+                </div>
+              `).join('') || ''}
+              <div class="order-total">
+                <span>${subtotalLabel}:</span>
+                <span>${Number(order.total_amount || 0).toFixed(2)} ${currency}</span>
+              </div>
+            </div>
+          `).join('')}
+          <div class="orders-subtotal">
+            <span>${ordersLabel} ${totalLabel}:</span>
+            <span>${ordersTotal.toFixed(2)} ${currency}</span>
+          </div>
+        </div>
+      `
+    }
+    
+    const receiptContent = `<!DOCTYPE html>
+<html dir="${dir}">
+<head>
+<meta charset="UTF-8">
+<title>${receiptLabel} - ${booking.room_name}</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "Courier New", monospace; padding: 10mm; max-width: 80mm; margin: 0 auto; font-size: 12px; direction: ${dir}; }
+.header { text-align: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 2px solid #000; }
+.header h1 { font-size: 18px; margin-bottom: 5px; }
+.header p { font-size: 10px; color: #666; }
+.info { margin: 10px 0; font-size: 11px; }
+.info-row { display: flex; justify-content: space-between; margin: 4px 0; }
+.section-title { font-weight: bold; font-size: 12px; margin: 10px 0 5px 0; padding: 5px 0; border-bottom: 1px dashed #000; }
+.room-section { margin: 10px 0; padding: 10px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; }
+.room-cost { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; margin: 5px 0; }
+.orders-section { margin: 10px 0; }
+.order-block { margin: 8px 0; padding: 8px 0; border-bottom: 1px dotted #ccc; }
+.order-header { font-size: 10px; color: #666; margin-bottom: 5px; }
+.item { display: flex; justify-content: space-between; margin: 3px 0; font-size: 11px; }
+.item-name { flex: 1; }
+.item-qty { width: 30px; text-align: center; }
+.item-price { width: 50px; text-align: ${isRtl ? 'left' : 'right'}; }
+.order-total { display: flex; justify-content: space-between; font-size: 11px; margin-top: 5px; padding-top: 5px; border-top: 1px dotted #ccc; }
+.orders-subtotal { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; margin-top: 10px; padding-top: 5px; border-top: 1px dashed #000; }
+.grand-total { margin-top: 15px; padding: 10px 0; border-top: 2px solid #000; border-bottom: 2px solid #000; }
+.grand-total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; }
+.footer { margin-top: 15px; text-align: center; font-size: 10px; color: #666; }
+@media print { body { padding: 0; } @page { size: 80mm auto; margin: 5mm; } }
+</style>
+</head>
+<body>
+<div class="header">
+<h1>X-Station</h1>
+<p>${receiptLabel}</p>
+</div>
+<div class="info">
+<div class="info-row"><span>${bookingLabel} #${booking.id}</span><span>${bookingDate}</span></div>
+<div class="info-row"><span>${roomLabel}:</span><span>${booking.room_name}</span></div>
+<div class="info-row"><span>${customerLabel}:</span><span>${booking.customer_name || (dictionary?.bookings?.guestCustomer || 'Guest')}</span></div>
+<div class="info-row"><span>${phoneLabel}:</span><span>${booking.customer_phone || '-'}</span></div>
+</div>
+<div class="room-section">
+<div class="section-title">${roomLabel} ${durationLabel}</div>
+<div class="info-row"><span>${startTimeLabel}:</span><span>${startTime}</span></div>
+<div class="info-row"><span>${endTimeLabel}:</span><span>${endTime}</span></div>
+<div class="info-row"><span>${durationLabel}:</span><span>${durationText}</span></div>
+<div class="room-cost">
+<span>${roomCostLabel}:</span>
+<span>${roomPrice.toFixed(2)} ${currency}</span>
+</div>
+</div>
+${ordersHtml}
+<div class="grand-total">
+<div class="grand-total-row">
+<span>${totalLabel}:</span>
+<span>${grandTotal.toFixed(2)} ${currency}</span>
+</div>
+</div>
+<div class="footer">
+<p>${thankYouLabel}</p>
+<p style="margin-top: 5px;">${new Date().toLocaleDateString(getLocaleForRtl(isRtl))}</p>
+</div>
+<script>window.onload = function() { window.print(); }</script>
+</body>
+</html>`
+
+    const printWindow = window.open('', '_blank', 'width=400,height=600')
+    if (printWindow) {
+      printWindow.document.write(receiptContent)
+      printWindow.document.close()
+    }
+  }
+
   // Use centralized timezone utilities for proper UTC to local conversion
   const parseDateTime = parseServerDateTimeMs
 
@@ -493,21 +745,43 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
 
   return (
     <Grid container spacing={6} dir={isRtl ? 'rtl' : 'ltr'}>
-      {error && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='error' onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={5000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert 
+          severity='error' 
+          onClose={() => setError(null)}
+          variant='filled'
+          sx={{ 
+            overflow: 'hidden',
+            '& .MuiAlert-message': { overflow: 'hidden', textOverflow: 'ellipsis' }
+          }}
+        >
+          {error}
+        </Alert>
+      </Snackbar>
 
-      {successMessage && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='success' onClose={() => setSuccessMessage(null)}>
-            {successMessage}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={5000}
+        onClose={() => setSuccessMessage(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert 
+          severity='success' 
+          onClose={() => setSuccessMessage(null)}
+          variant='filled'
+          sx={{ 
+            overflow: 'hidden',
+            '& .MuiAlert-message': { overflow: 'hidden', textOverflow: 'ellipsis' }
+          }}
+        >
+          {successMessage}
+        </Alert>
+      </Snackbar>
 
       {/* Header */}
       <Grid size={{ xs: 12 }}>
@@ -604,6 +878,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.startTime || 'Start Time'}</th>
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.duration || 'Duration'}</th>
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.timer || 'Timer'}</th>
+                      <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.navigation?.orders || 'Orders'}</th>
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.price || 'Price'}</th>
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.common?.actions || 'Actions'}</th>
                     </tr>
@@ -669,7 +944,9 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                               <Chip
                                 label={typeof duration === 'number' 
                                   ? (duration < 1 
-                                    ? `${isRtl ? toArabicDigits(Math.round(duration * 60).toString()) : Math.round(duration * 60)} ${dictionary?.common?.mins || 'mins'}` 
+                                    ? (duration === 0 
+                                      ? (dictionary?.bookings?.justStarted || 'Just started')
+                                      : `${isRtl ? toArabicDigits(Math.round(duration * 60).toString()) : Math.round(duration * 60)} ${dictionary?.common?.mins || 'mins'}`)
                                     : `${isRtl ? toArabicDigits(duration.toFixed(1)) : duration.toFixed(1)} ${dictionary?.common?.hours || 'hrs'}`)
                                   : `${isRtl ? toArabicDigits(duration.toString()) : duration} ${dictionary?.common?.hours || 'hrs'}`}
                                 color={isActive ? 'warning' : 'default'}
@@ -755,15 +1032,63 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                               )}
                             </td>
                             <td className='p-3'>
-                              <Typography variant='body2' fontWeight={500} color='success.main'>
-                                {isActive
-                                  ? `~${isRtl ? toArabicDigits(booking.estimated_price?.toFixed(2) || '0') : booking.estimated_price?.toFixed(2)}`
-                                  : (isRtl ? toArabicDigits((booking.price || booking.total_price || 0).toString()) : (booking.price || booking.total_price || 0))} {dictionary?.common?.currency || 'EGP'}
-                              </Typography>
+                              {/* Orders linked to this booking */}
+                              {booking.orders_count > 0 ? (
+                                <div 
+                                  className={`flex flex-col gap-1 ${isRtl ? 'items-end' : 'items-start'} cursor-pointer`}
+                                  onClick={() => {
+                                    setSelectedBookingOrders(booking)
+                                    setViewOrdersDialogOpen(true)
+                                  }}
+                                >
+                                  <Chip
+                                    icon={<i className='tabler-shopping-cart text-sm' />}
+                                    label={`${isRtl ? toArabicDigits(booking.orders_count.toString()) : booking.orders_count} ${dictionary?.navigation?.orders || 'orders'}`}
+                                    color='info'
+                                    size='small'
+                                    variant='outlined'
+                                    clickable
+                                  />
+                                  <Typography variant='caption' color='info.main' fontWeight={500}>
+                                    {isRtl ? toArabicDigits(Number(booking.orders_total || 0).toFixed(2)) : Number(booking.orders_total || 0).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                                  </Typography>
+                                </div>
+                              ) : (
+                                <Typography variant='caption' color='text.secondary'>
+                                  {dictionary?.orders?.noOrders || 'No orders'}
+                                </Typography>
+                              )}
+                            </td>
+                            <td className='p-3'>
+                              <div className='flex flex-col gap-0.5'>
+                                <Typography variant='body2' fontWeight={500} color='success.main'>
+                                  {isActive
+                                    ? `~${isRtl ? toArabicDigits(booking.estimated_price?.toFixed(2) || '0') : booking.estimated_price?.toFixed(2)}`
+                                    : (isRtl ? toArabicDigits((booking.price || booking.total_price || 0).toString()) : (booking.price || booking.total_price || 0))} {dictionary?.common?.currency || 'EGP'}
+                                </Typography>
+                                {Number(booking.orders_total) > 0 && (
+                                  <Typography variant='caption' color='text.secondary'>
+                                    + {isRtl ? toArabicDigits(Number(booking.orders_total || 0).toFixed(2)) : Number(booking.orders_total || 0).toFixed(2)} {dictionary?.orders?.cafeteriaOrders || 'cafeteria'}
+                                  </Typography>
+                                )}
+                                {(isActive && Number(booking.orders_total) > 0) && (
+                                  <Typography variant='caption' fontWeight={600} color='primary.main'>
+                                    = {isRtl ? toArabicDigits((Number(booking.estimated_price || 0) + Number(booking.orders_total || 0)).toFixed(2)) : (Number(booking.estimated_price || 0) + Number(booking.orders_total || 0)).toFixed(2)} {dictionary?.common?.total || 'total'}
+                                  </Typography>
+                                )}
+                              </div>
                             </td>
                             <td className='p-3'>
                               {isActive && !isPending && !booking.finished_at && (
                                 <div className={`flex gap-2 ${isRtl ? 'flex-row-reverse justify-end' : ''}`}>
+                                  <IconButton
+                                    size='small'
+                                    color='info'
+                                    onClick={() => handleOpenAddOrder(booking as ActiveBooking)}
+                                    title={dictionary?.orders?.addOrderToBooking || 'Add Order'}
+                                  >
+                                    <i className='tabler-shopping-cart-plus' />
+                                  </IconButton>
                                   <Button
                                     variant='contained'
                                     color='error'
@@ -779,6 +1104,14 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                               )}
                               {isActive && !isPending && booking.finished_at && (
                                 <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse justify-end' : ''}`}>
+                                  <IconButton
+                                    size='small'
+                                    color='info'
+                                    onClick={() => handleOpenAddOrder(booking as ActiveBooking)}
+                                    title={dictionary?.orders?.addOrderToBooking || 'Add Order'}
+                                  >
+                                    <i className='tabler-shopping-cart-plus' />
+                                  </IconButton>
                                   <Button
                                     variant='contained'
                                     color='error'
@@ -852,8 +1185,9 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.startTime || 'Start Time'}</th>
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.endTime || 'End Time'}</th>
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.duration || 'Duration'}</th>
+                        <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.navigation?.orders || 'Orders'}</th>
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.price || 'Price'}</th>
-                        <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.common?.status || 'Status'}</th>
+                        <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.common?.actions || 'Actions'}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -897,17 +1231,45 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
                               />
                             </td>
                             <td className='p-3'>
-                              <Typography variant='body2' fontWeight={500} color='success.main'>
-                                {isRtl ? toArabicDigits((booking.price || booking.total_price || 0).toString()) : (booking.price || booking.total_price || 0)} {dictionary?.common?.currency || 'EGP'}
-                              </Typography>
+                              {/* Orders linked to this booking */}
+                              {booking.orders_count > 0 ? (
+                                <Button
+                                  size='small'
+                                  variant='outlined'
+                                  color='info'
+                                  startIcon={<i className='tabler-shopping-cart text-sm' />}
+                                  onClick={() => {
+                                    setSelectedBookingOrders(booking)
+                                    setViewOrdersDialogOpen(true)
+                                  }}
+                                >
+                                  {isRtl ? toArabicDigits(booking.orders_count.toString()) : booking.orders_count} ({isRtl ? toArabicDigits(Number(booking.orders_total || 0).toFixed(2)) : Number(booking.orders_total || 0).toFixed(2)})
+                                </Button>
+                              ) : (
+                                <Typography variant='caption' color='text.secondary'>-</Typography>
+                              )}
                             </td>
                             <td className='p-3'>
-                              <Chip
-                                label={dictionary?.bookings?.completed || 'Completed'}
-                                color='success'
+                              <div className='flex flex-col gap-0.5'>
+                                <Typography variant='body2' fontWeight={500} color='success.main'>
+                                  {isRtl ? toArabicDigits((booking.price || booking.total_price || 0).toString()) : (booking.price || booking.total_price || 0)} {dictionary?.common?.currency || 'EGP'}
+                                </Typography>
+                                {Number(booking.orders_total) > 0 && (
+                                  <Typography variant='caption' fontWeight={500} color='primary.main'>
+                                    {dictionary?.common?.total || 'Total'}: {isRtl ? toArabicDigits((Number(booking.price || 0) + Number(booking.orders_total || 0)).toFixed(2)) : (Number(booking.price || 0) + Number(booking.orders_total || 0)).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                                  </Typography>
+                                )}
+                              </div>
+                            </td>
+                            <td className='p-3'>
+                              <IconButton
                                 size='small'
-                                icon={<i className='tabler-check text-sm' />}
-                              />
+                                color='primary'
+                                onClick={() => printBookingReceipt(booking)}
+                                title={dictionary?.orders?.printReceipt || 'Print Receipt'}
+                              >
+                                <i className='tabler-printer' />
+                              </IconButton>
                             </td>
                           </tr>
                         )
@@ -979,23 +1341,34 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
             </CustomTextField>
 
             <Autocomplete
-              options={customers}
-              getOptionLabel={(option) => `${option.name} - ${option.phone}`}
-              value={customers.find(c => c.id === newBooking.customer_id) || null}
-              onChange={(_, newValue) => setNewBooking({ ...newBooking, customer_id: newValue?.id || 0 })}
+              options={[{ id: -1, name: dictionary?.bookings?.guestCustomer || 'Guest', phone: '0000000000' } as Customer, ...customers]}
+              getOptionLabel={(option) => option.id === -1 ? (dictionary?.bookings?.guestCustomer || 'Guest') : `${option.name} - ${option.phone}`}
+              value={newBooking.customer_id === -1 
+                ? { id: -1, name: dictionary?.bookings?.guestCustomer || 'Guest', phone: '0000000000' } as Customer
+                : customers.find(c => c.id === newBooking.customer_id) || { id: -1, name: dictionary?.bookings?.guestCustomer || 'Guest', phone: '0000000000' } as Customer
+              }
+              onChange={(_, newValue) => setNewBooking({ ...newBooking, customer_id: newValue?.id || -1 })}
               renderInput={(params) => (
                 <CustomTextField
                   {...params}
                   label={dictionary?.customers?.selectCustomer || 'Select Customer'}
                   placeholder={dictionary?.common?.search || 'Search by name or phone'}
-                  required
                 />
+              )}
+              renderOption={(props, option) => (
+                <li {...props} key={option.id}>
+                  <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <i className={option.id === -1 ? 'tabler-user-question' : 'tabler-user'} />
+                    {option.id === -1 ? (dictionary?.bookings?.guestCustomer || 'Guest') : `${option.name} - ${option.phone}`}
+                  </div>
+                </li>
               )}
               isOptionEqualToValue={(option, value) => option.id === value.id}
               filterOptions={(options, { inputValue }) => {
                 const searchTerm = inputValue.toLowerCase()
                 return options.filter(
                   (option) =>
+                    option.id === -1 ||
                     option.name?.toLowerCase().includes(searchTerm) ||
                     option.phone?.toLowerCase().includes(searchTerm)
                 )
@@ -1010,7 +1383,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
           <Button
             variant='contained'
             onClick={handleStartBooking}
-            disabled={isSubmitting || !newBooking.room_id || !newBooking.customer_id}
+            disabled={isSubmitting || !newBooking.room_id}
           >
             {isSubmitting ? <CircularProgress size={20} /> : dictionary?.bookings?.startBooking || 'Start Now'}
           </Button>
@@ -1094,6 +1467,284 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
             disabled={isSubmitting || !newRoomId}
           >
             {isSubmitting ? <CircularProgress size={20} /> : dictionary?.bookings?.switchRoom || 'Switch'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add Order to Booking Dialog */}
+      <Dialog open={addOrderDialogOpen} onClose={() => setAddOrderDialogOpen(false)} maxWidth='md' fullWidth dir={isRtl ? 'rtl' : 'ltr'}>
+        <DialogTitle className={isRtl ? 'text-right' : ''}>
+          <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <i className='tabler-shopping-cart-plus' />
+            {dictionary?.orders?.addOrderToBooking || 'Add Order'} - {selectedBookingForOrder?.room_name}
+          </div>
+        </DialogTitle>
+        <DialogContent>
+          {selectedBookingForOrder && (
+            <div className='flex flex-col gap-4 pt-2'>
+              {/* Booking Info */}
+              <Card variant='outlined'>
+                <CardContent className={`p-3 ${isRtl ? 'text-right' : ''}`}>
+                  <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <div className='rounded-lg p-2 bg-primary/10'>
+                      <i className='tabler-door text-primary text-lg' />
+                    </div>
+                    <div>
+                      <Typography variant='subtitle2' fontWeight={600}>
+                        {selectedBookingForOrder.room_name}
+                      </Typography>
+                      <Typography variant='body2' color='text.secondary'>
+                        {selectedBookingForOrder.customer_name || (dictionary?.bookings?.guestCustomer || 'Guest')}
+                      </Typography>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Divider />
+
+              <Box>
+                <Tabs value={orderTab} onChange={(_, v) => setOrderTab(v)}>
+                  <Tab label={dictionary?.orders?.selectItems || 'Select Items'} />
+                  <Tab label={`${dictionary?.orders?.orderItems || 'Order'} (${orderItems.length})`} />
+                </Tabs>
+
+                <Box className='mt-4'>
+                  {orderTab === 0 && (
+                    <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto'>
+                      {availableItems.length > 0 ? (
+                        availableItems.map(item => (
+                          <Card
+                            key={item.id}
+                            variant='outlined'
+                            className='cursor-pointer hover:border-primary transition-colors'
+                            onClick={() => addItemToOrder(item)}
+                          >
+                            <CardContent className='p-3'>
+                              <Typography variant='body2' fontWeight={500} noWrap>
+                                {item.name}
+                              </Typography>
+                              <div className={`flex justify-between items-center mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                <Typography variant='caption' color='success.main'>
+                                  {isRtl ? toArabicDigits(String(item.price)) : item.price} {dictionary?.common?.currency || 'EGP'}
+                                </Typography>
+                                <Typography variant='caption' color='text.secondary'>
+                                  {isRtl ? toArabicDigits(String(item.stock)) : item.stock} {dictionary?.common?.inStock || 'left'}
+                                </Typography>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      ) : (
+                        <div className='col-span-3 text-center py-8'>
+                          <CircularProgress size={24} />
+                          <Typography color='text.secondary' className='mt-2'>
+                            {dictionary?.common?.loading || 'Loading...'}
+                          </Typography>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {orderTab === 1 && (
+                    <div>
+                      {orderItems.length > 0 ? (
+                        <div className='flex flex-col gap-3'>
+                          {orderItems.map(item => (
+                            <div
+                              key={item.item_id}
+                              className={`flex items-center justify-between p-3 border rounded-lg ${isRtl ? 'flex-row-reverse' : ''}`}
+                            >
+                              <div className={isRtl ? 'text-right' : ''}>
+                                <Typography variant='body2' fontWeight={500}>
+                                  {item.name}
+                                </Typography>
+                                <Typography variant='caption' color='text.secondary'>
+                                  {isRtl ? toArabicDigits(String(item.price)) : item.price} {dictionary?.common?.currency || 'EGP'} x {isRtl ? toArabicDigits(String(item.quantity)) : item.quantity} = {isRtl ? toArabicDigits((item.price * item.quantity).toFixed(2)) : (item.price * item.quantity).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                                </Typography>
+                              </div>
+                              <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                <IconButton
+                                  size='small'
+                                  onClick={() => updateItemQuantity(item.item_id, item.quantity - 1)}
+                                >
+                                  <i className='tabler-minus text-sm' />
+                                </IconButton>
+                                <Typography variant='body2' className='w-8 text-center'>
+                                  {isRtl ? toArabicDigits(String(item.quantity)) : item.quantity}
+                                </Typography>
+                                <IconButton
+                                  size='small'
+                                  onClick={() => updateItemQuantity(item.item_id, item.quantity + 1)}
+                                >
+                                  <i className='tabler-plus text-sm' />
+                                </IconButton>
+                              </div>
+                            </div>
+                          ))}
+                          <Divider />
+                          <div className={`flex justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                            <Typography variant='h6'>
+                              {dictionary?.orders?.total || 'Total'}
+                            </Typography>
+                            <Typography variant='h5' color='success.main'>
+                              {isRtl ? toArabicDigits(orderTotal.toFixed(2)) : orderTotal.toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                            </Typography>
+                          </div>
+                        </div>
+                      ) : (
+                        <Typography color='text.secondary' className='text-center py-8'>
+                          {dictionary?.orders?.addItemsFirst || 'Add items to the order'}
+                        </Typography>
+                      )}
+                    </div>
+                  )}
+                </Box>
+              </Box>
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ flexDirection: isRtl ? 'row-reverse' : 'row', gap: 1 }}>
+          <Button onClick={() => setAddOrderDialogOpen(false)} disabled={isSubmitting}>
+            {dictionary?.common?.cancel || 'Cancel'}
+          </Button>
+          <Button
+            variant='contained'
+            startIcon={<i className='tabler-shopping-cart-check' />}
+            onClick={handleCreateBookingOrder}
+            disabled={isSubmitting || orderItems.length === 0}
+          >
+            {isSubmitting ? (
+              <CircularProgress size={20} />
+            ) : (
+              `${dictionary?.orders?.createOrder || 'Create Order'} (${isRtl ? toArabicDigits(orderTotal.toFixed(2)) : orderTotal.toFixed(2)} ${dictionary?.common?.currency || 'EGP'})`
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* View Orders Dialog */}
+      <Dialog open={viewOrdersDialogOpen} onClose={() => setViewOrdersDialogOpen(false)} maxWidth='md' fullWidth dir={isRtl ? 'rtl' : 'ltr'}>
+        <DialogTitle className={isRtl ? 'text-right' : ''}>
+          <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <i className='tabler-shopping-cart' />
+            {dictionary?.orders?.orderDetails || 'Order Details'} - {selectedBookingOrders?.room_name}
+          </div>
+        </DialogTitle>
+        <DialogContent>
+          {selectedBookingOrders && (
+            <div className='flex flex-col gap-4 pt-2'>
+              {/* Booking Summary */}
+              <Card variant='outlined'>
+                <CardContent className='p-3'>
+                  <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <div className='rounded-lg p-2 bg-primary/10'>
+                        <i className='tabler-door text-primary text-lg' />
+                      </div>
+                      <div className={isRtl ? 'text-right' : ''}>
+                        <Typography variant='subtitle2' fontWeight={600}>
+                          {selectedBookingOrders.room_name}
+                        </Typography>
+                        <Typography variant='body2' color='text.secondary'>
+                          {selectedBookingOrders.customer_name || (dictionary?.bookings?.guestCustomer || 'Guest')}
+                        </Typography>
+                      </div>
+                    </div>
+                    <div className={isRtl ? 'text-left' : 'text-right'}>
+                      <Typography variant='h6' color='info.main'>
+                        {isRtl ? toArabicDigits(selectedBookingOrders.orders_count?.toString() || '0') : selectedBookingOrders.orders_count} {dictionary?.navigation?.orders || 'orders'}
+                      </Typography>
+                      <Typography variant='body2' color='success.main' fontWeight={600}>
+                        {isRtl ? toArabicDigits(Number(selectedBookingOrders.orders_total || 0).toFixed(2)) : Number(selectedBookingOrders.orders_total || 0).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                      </Typography>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Orders List */}
+              <div className='flex flex-col gap-3 max-h-[400px] overflow-y-auto'>
+                {selectedBookingOrders.orders?.map((order: any, orderIndex: number) => (
+                  <Card key={order.id} variant='outlined'>
+                    <CardContent className='p-3'>
+                      {/* Order Header */}
+                      <div className={`flex items-center justify-between mb-3 pb-2 border-b ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                          <Chip 
+                            label={`#${isRtl ? toArabicDigits(order.id.toString()) : order.id}`} 
+                            size='small' 
+                            color='primary' 
+                            variant='outlined'
+                          />
+                          <Typography variant='caption' color='text.secondary'>
+                            {formatLocalTime(order.created_at, getLocaleForRtl(isRtl))}
+                          </Typography>
+                        </div>
+                        <Typography variant='subtitle2' color='success.main' fontWeight={600}>
+                          {isRtl ? toArabicDigits(Number(order.total_amount || 0).toFixed(2)) : Number(order.total_amount || 0).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                        </Typography>
+                      </div>
+
+                      {/* Order Items */}
+                      <div className='flex flex-col gap-2'>
+                        {order.items?.map((item: any, itemIndex: number) => (
+                          <div 
+                            key={`${order.id}-${item.item_id || itemIndex}`}
+                            className={`flex items-center justify-between py-1 ${isRtl ? 'flex-row-reverse' : ''}`}
+                          >
+                            <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                              <div className='w-6 h-6 rounded bg-actionHover flex items-center justify-center'>
+                                <Typography variant='caption' fontWeight={500}>
+                                  {isRtl ? toArabicDigits(item.quantity?.toString() || '1') : item.quantity || 1}x
+                                </Typography>
+                              </div>
+                              <Typography variant='body2'>
+                                {item.item_name || item.name}
+                              </Typography>
+                            </div>
+                            <Typography variant='body2' color='text.secondary'>
+                              {isRtl ? toArabicDigits(Number(item.total_price || item.unit_price * item.quantity || 0).toFixed(2)) : Number(item.total_price || item.unit_price * item.quantity || 0).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                            </Typography>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Discount if any */}
+                      {Number(order.discount) > 0 && (
+                        <div className={`flex items-center justify-between mt-2 pt-2 border-t ${isRtl ? 'flex-row-reverse' : ''}`}>
+                          <Typography variant='caption' color='error.main'>
+                            {dictionary?.common?.discount || 'Discount'}
+                          </Typography>
+                          <Typography variant='caption' color='error.main'>
+                            -{isRtl ? toArabicDigits(Number(order.discount || 0).toFixed(2)) : Number(order.discount || 0).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                          </Typography>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Grand Total */}
+              <Card variant='outlined' sx={{ bgcolor: 'success.lighter' }}>
+                <CardContent className='p-3'>
+                  <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <Typography variant='subtitle1' fontWeight={600}>
+                      {dictionary?.orders?.total || 'Total'}
+                    </Typography>
+                    <Typography variant='h5' color='success.main' fontWeight={700}>
+                      {isRtl ? toArabicDigits(Number(selectedBookingOrders.orders_total || 0).toFixed(2)) : Number(selectedBookingOrders.orders_total || 0).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                    </Typography>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions className={isRtl ? 'flex-row-reverse justify-start' : ''}>
+          <Button onClick={() => setViewOrdersDialogOpen(false)}>
+            {dictionary?.common?.close || 'Close'}
           </Button>
         </DialogActions>
       </Dialog>

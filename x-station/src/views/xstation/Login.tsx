@@ -14,6 +14,7 @@ import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -183,11 +184,16 @@ const XStationLogin = ({ mode, dictionary }: LoginProps) => {
               </Typography>
             </div>
 
-            {errorMessage && (
-              <Alert severity='error' className='mbe-4' onClose={() => setErrorMessage(null)}>
+            <Snackbar
+              open={!!errorMessage}
+              autoHideDuration={5000}
+              onClose={() => setErrorMessage(null)}
+              anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+            >
+              <Alert severity='error' onClose={() => setErrorMessage(null)} variant='filled'>
                 {errorMessage}
               </Alert>
-            )}
+            </Snackbar>
 
             <form
               noValidate

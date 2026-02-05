@@ -12,6 +12,7 @@ import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -258,21 +259,43 @@ const CafeteriaList = ({ dictionary }: CafeteriaListProps) => {
 
   return (
     <Grid container spacing={6} dir={isRtl ? 'rtl' : 'ltr'}>
-      {error && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='error' onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={5000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert 
+          severity='error' 
+          onClose={() => setError(null)}
+          variant='filled'
+          sx={{ 
+            overflow: 'hidden',
+            '& .MuiAlert-message': { overflow: 'hidden', textOverflow: 'ellipsis' }
+          }}
+        >
+          {error}
+        </Alert>
+      </Snackbar>
 
-      {successMessage && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='success' onClose={() => setSuccessMessage(null)}>
-            {successMessage}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={5000}
+        onClose={() => setSuccessMessage(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert 
+          severity='success' 
+          onClose={() => setSuccessMessage(null)}
+          variant='filled'
+          sx={{ 
+            overflow: 'hidden',
+            '& .MuiAlert-message': { overflow: 'hidden', textOverflow: 'ellipsis' }
+          }}
+        >
+          {successMessage}
+        </Alert>
+      </Snackbar>
 
       {/* Header */}
       <Grid size={{ xs: 12 }}>
@@ -313,7 +336,13 @@ const CafeteriaList = ({ dictionary }: CafeteriaListProps) => {
       {/* Low Stock Alert */}
       {lowStockItems.length > 0 && (
         <Grid size={{ xs: 12 }}>
-          <Alert severity='warning'>
+          <Alert 
+            severity='warning'
+            sx={{ 
+              overflow: 'hidden',
+              '& .MuiAlert-message': { overflow: 'hidden', textOverflow: 'ellipsis' }
+            }}
+          >
             {toLocalizedNum(lowStockItems.length)} {dictionary?.cafeteria?.lowStockWarning || 'items are running low on stock'}
           </Alert>
         </Grid>

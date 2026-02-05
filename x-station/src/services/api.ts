@@ -203,7 +203,7 @@ export const bookingApi = {
   
   list: () => apiCall('listBookings'),
   
-  getAll: () => apiCall('listBookings'),
+  getAll: () => apiCall('getBookings'),
   
   getActive: () => apiCall('getActiveBookings'),
   
@@ -224,8 +224,12 @@ export const bookingApi = {
   
   getTodays: () => apiCall('getTodaysBookings'),
   
+  getRecent: () => apiCall('getRecentBookings'),
+  
   updateActive: (data: { booking_id: number; customer_id: number }) =>
-    apiCall('updateActiveBooking', data)
+    apiCall('updateActiveBooking', data),
+  
+  getEndingAlerts: () => apiCall('getBookingEndingAlerts')
 }
 
 // ==================== CAFETERIA ITEMS ====================
@@ -273,6 +277,7 @@ export const orderApi = {
     customer_phone: string
     customer_name?: string
     items: Array<{ item_id: number; quantity: number }>
+    booking_id?: number // Optional: link order to an active booking
   }) => apiCall('quickOrder', data),
   
   list: () => apiCall('listOrders'),

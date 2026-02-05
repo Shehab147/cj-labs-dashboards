@@ -10,6 +10,7 @@ import Chip from '@mui/material/Chip'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
 import LinearProgress from '@mui/material/LinearProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
@@ -91,21 +92,27 @@ const RoomsStatus = ({ dictionary }: RoomsStatusProps) => {
 
   return (
     <Grid container spacing={6}>
-      {error && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='error' onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={5000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert severity='error' onClose={() => setError(null)} variant='filled'>
+          {error}
+        </Alert>
+      </Snackbar>
       
-      {successMessage && (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity='success' onClose={() => setSuccessMessage(null)}>
-            {successMessage}
-          </Alert>
-        </Grid>
-      )}
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={5000}
+        onClose={() => setSuccessMessage(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert severity='success' onClose={() => setSuccessMessage(null)} variant='filled'>
+          {successMessage}
+        </Alert>
+      </Snackbar>
 
       {/* Summary Card */}
       <Grid size={{ xs: 12 }}>

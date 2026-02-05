@@ -21,7 +21,7 @@ export const useNotification = (defaultOptions?: NotificationOptions): UseNotifi
   const [successTimer, setSuccessTimer] = useState<NodeJS.Timeout | null>(null)
   const [errorTimer, setErrorTimer] = useState<NodeJS.Timeout | null>(null)
 
-  const defaultDuration = defaultOptions?.duration ?? 3000
+  const defaultDuration = defaultOptions?.duration ?? 5000
   const defaultAutoDismiss = defaultOptions?.autoDismiss ?? true
 
   // Clear timers on unmount
