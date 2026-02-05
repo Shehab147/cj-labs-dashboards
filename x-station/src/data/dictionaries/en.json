@@ -158,7 +158,9 @@
     "todaySummary": "Today's Summary",
     "sessionTimers": "Session Timers",
     "quickAddCustomer": "Quick Add Customer",
-    "addAndSelect": "Add & Select"
+    "addAndSelect": "Add & Select",
+    "recentBookings": "Recent Bookings",
+    "last10Bookings": "Last 10 completed bookings"
   },
   "rooms": {
     "title": "Rooms",
@@ -237,7 +239,8 @@
     "open": "Open",
     "pending": "Pending",
     "notStarted": "Not Started",
-    "roomCost": "Room Cost"
+    "roomCost": "Room Cost",
+    "noRecentBookings": "No recent bookings"
   },
   "customers": {
     "title": "Customers",

@@ -171,7 +171,9 @@
     "todaySummary": "ملخص اليوم",
     "sessionTimers": "مؤقتات الجلسات",
     "quickAddCustomer": "إضافة عميل سريع",
-    "addAndSelect": "إضافة واختيار"
+    "addAndSelect": "إضافة واختيار",
+    "recentBookings": "الحجوزات الأخيرة",
+    "last10Bookings": "آخر 10 حجوزات مكتملة"
   },
   "rooms": {
     "title": "الغرف",
@@ -255,7 +257,8 @@
     "noBookingsToday": "لا توجد حجوزات اليوم",
     "guestCustomer": "زائر",
     "customerOptional": "اختياري - الافتراضي زائر",
-    "roomCost": "تكلفة الغرفة"
+    "roomCost": "تكلفة الغرفة",
+    "noRecentBookings": "لا توجد حجوزات حديثة"
   },
   "customers": {
     "title": "العملاء",
