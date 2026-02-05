@@ -635,32 +635,24 @@ ${ordersHtml}
 </body>
 </html>`
 
-    // Use pywebview print API if available, otherwise fall back to iframe printing
-    if (typeof window !== 'undefined' && (window as any).pywebview?.api?.print_html) {
-      (window as any).pywebview.api.print_html(receiptContent)
+    // Use pywebview print API if available
+    const pywebview = typeof window !== 'undefined' ? (window as any).pywebview : null
+    
+    if (pywebview?.api?.print_html) {
+      pywebview.api.print_html(receiptContent)
     } else {
-      // Fallback: Create a hidden iframe for printing
-      const printFrame = document.createElement('iframe')
-      printFrame.style.position = 'absolute'
-      printFrame.style.top = '-9999px'
-      printFrame.style.left = '-9999px'
-      printFrame.style.width = '0'
-      printFrame.style.height = '0'
-      document.body.appendChild(printFrame)
-      
-      const frameDoc = printFrame.contentWindow?.document
-      if (frameDoc) {
-        frameDoc.open()
-        frameDoc.write(receiptContent)
-        frameDoc.close()
-        
-        printFrame.contentWindow?.focus()
-        printFrame.contentWindow?.print()
-        
-        // Remove iframe after printing
+      // Fallback: Create a new window for printing
+      const printWindow = window.open('', '_blank', 'width=400,height=600')
+      if (printWindow) {
+        printWindow.document.write(receiptContent)
+        printWindow.document.close()
+        printWindow.onload = () => {
+          printWindow.print()
+        }
+        // Trigger print after a short delay as fallback
         setTimeout(() => {
-          document.body.removeChild(printFrame)
-        }, 1000)
+          printWindow.print()
+        }, 500)
       }
     }
   }
