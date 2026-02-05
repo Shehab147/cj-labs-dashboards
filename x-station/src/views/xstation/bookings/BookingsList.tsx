@@ -723,18 +723,28 @@ ${ordersHtml}
 </body>
 </html>`
 
-    // Use pywebview direct print API if available, otherwise fallback to browser print
+    // Use pywebview direct print API if available
     const pywebview = typeof window !== 'undefined' ? (window as any).pywebview : null
     
     if (pywebview?.api?.print_html_direct) {
       pywebview.api.print_html_direct(receiptContent)
     } else {
-      // Fallback for browser: open print dialog
-      const printWindow = window.open('', '_blank', 'width=400,height=600')
-      if (printWindow) {
-        printWindow.document.write(receiptContent)
-        printWindow.document.close()
-        setTimeout(() => printWindow.print(), 300)
+      // Fallback: use hidden iframe for printing (no popup)
+      const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'
+      iframe.style.bottom = '0'
+      iframe.style.width = '0'
+      iframe.style.height = '0'
+      iframe.style.border = 'none'
+      iframe.srcdoc = receiptContent
+      document.body.appendChild(iframe)
+      
+      iframe.onload = () => {
+        setTimeout(() => {
+          iframe.contentWindow?.print()
+          setTimeout(() => document.body.removeChild(iframe), 1000)
+        }, 300)
       }
     }
   }
