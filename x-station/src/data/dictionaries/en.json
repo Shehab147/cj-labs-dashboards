@@ -240,6 +240,7 @@
     "pending": "Pending",
     "notStarted": "Not Started",
     "roomCost": "Room Cost",
+    "roomDuration": "Room Duration",
     "noRecentBookings": "No recent bookings"
   },
   "customers": {

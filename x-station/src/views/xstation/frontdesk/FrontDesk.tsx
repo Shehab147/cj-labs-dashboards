@@ -524,6 +524,7 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
     const startTimeLabel = dictionary?.bookings?.startTime || 'Start Time'
     const endTimeLabel = dictionary?.bookings?.endTime || 'End Time'
     const durationLabel = dictionary?.bookings?.duration || 'Duration'
+    const roomDurationLabel = dictionary?.bookings?.roomDuration || 'Room Duration'
     const roomCostLabel = dictionary?.bookings?.roomCost || 'Room Cost'
     const ordersLabel = dictionary?.navigation?.orders || 'Orders'
     const itemLabel = dictionary?.orders?.item || 'Item'
@@ -611,7 +612,7 @@ body { font-family: "Courier New", monospace; padding: 10mm; max-width: 80mm; ma
 <div class="info-row"><span>${phoneLabel}:</span><span>${booking.customer_phone || '-'}</span></div>
 </div>
 <div class="room-section">
-<div class="section-title">${roomLabel} ${durationLabel}</div>
+<div class="section-title">${roomDurationLabel}</div>
 <div class="info-row"><span>${startTimeLabel}:</span><span>${startTime}</span></div>
 <div class="info-row"><span>${endTimeLabel}:</span><span>${endTime}</span></div>
 <div class="info-row"><span>${durationLabel}:</span><span>${durationText}</span></div>

@@ -258,6 +258,7 @@
     "guestCustomer": "زائر",
     "customerOptional": "اختياري - الافتراضي زائر",
     "roomCost": "تكلفة الغرفة",
+    "roomDuration": "مدة الغرفة",
     "noRecentBookings": "لا توجد حجوزات حديثة"
   },
   "customers": {
