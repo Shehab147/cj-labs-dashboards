@@ -4449,5 +4449,903 @@ function timerUpdate(){
     
     respond('success', 'Booking timer updated successfully.');
 }
+/*
+   SHIFT MANAGEMENT & DAILY INCOME ANALYSIS FUNCTIONS
+   For XSTATION - X-space Management System
+   
+   Features:
+   1. Start/End shifts to track daily income per shift
+   2. Print daily income analysis with detailed breakdowns
+*/
 
-// Database schema is in db.sql file
+// ============================================================
+// SHIFT MANAGEMENT FUNCTIONS
+// ============================================================
+
+/**
+ * Start a new shift
+ * Creates a new shift record for the current admin
+ */
+function startShift(){
+    global $conn;
+    $admin = getAdmin();
+    $adminId = $admin['id'];
+    
+    // Check if admin already has an active shift
+    $stmt = $conn->prepare("
+        SELECT id, started_at 
+        FROM shifts 
+        WHERE admin_id = ? 
+        AND ended_at IS NULL 
+        ORDER BY started_at DESC 
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $adminId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $activeShift = $result->fetch_assoc();
+    $stmt->close();
+    
+    if($activeShift){
+        respond('error', 'You already have an active shift started at ' . $activeShift['started_at']);
+    }
+    
+    // Get input for optional start time and opening cash
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $started_at = isset($input['started_at']) ? $input['started_at'] : date('Y-m-d H:i:s');
+    $opening_cash = isset($input['opening_cash']) ? (float)$input['opening_cash'] : 0;
+    $notes = isset($input['notes']) ? $input['notes'] : '';
+    
+    // Create new shift
+    $stmt = $conn->prepare("
+        INSERT INTO shifts (admin_id, started_at, opening_cash, notes, status) 
+        VALUES (?, ?, ?, ?, 'active')
+    ");
+    $stmt->bind_param("isds", $adminId, $started_at, $opening_cash, $notes);
+    $stmt->execute();
+    $shiftId = $conn->insert_id;
+    $stmt->close();
+    
+    respond('success', [
+        'message' => 'Shift started successfully.',
+        'shift_id' => $shiftId,
+        'admin' => [
+            'id' => $admin['id'],
+            'name' => $admin['name'],
+            'role' => $admin['role']
+        ],
+        'started_at' => $started_at,
+        'opening_cash' => $opening_cash,
+        'notes' => $notes
+    ]);
+}
+
+/**
+ * End current shift
+ * Closes the active shift and calculates all income/expenses
+ */
+function endShift(){
+    global $conn;
+    $admin = getAdmin();
+    $adminId = $admin['id'];
+    
+    // Get active shift
+    $stmt = $conn->prepare("
+        SELECT * 
+        FROM shifts 
+        WHERE admin_id = ? 
+        AND ended_at IS NULL 
+        ORDER BY started_at DESC 
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $adminId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $shift = $result->fetch_assoc();
+    $stmt->close();
+    
+    if(!$shift){
+        respond('error', 'No active shift found.');
+    }
+    
+    $shiftId = $shift['id'];
+    $started_at = $shift['started_at'];
+    
+    // Get input for end time and closing cash
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $ended_at = isset($input['ended_at']) ? $input['ended_at'] : date('Y-m-d H:i:s');
+    $closing_cash = isset($input['closing_cash']) ? (float)$input['closing_cash'] : 0;
+    $notes = isset($input['notes']) ? $input['notes'] : '';
+    
+    // Calculate shift income from orders during this shift
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as order_count,
+            COALESCE(SUM(price), 0) as order_revenue,
+            COALESCE(SUM(discount), 0) as order_discount
+        FROM orders 
+        WHERE created_at >= ? AND created_at <= ?
+    ");
+    $stmt->bind_param("ss", $started_at, $ended_at);
+    $stmt->execute();
+    $orderStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    // Calculate shift income from room bookings during this shift
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as booking_count,
+            COALESCE(SUM(price), 0) as booking_revenue
+        FROM room_booking 
+        WHERE createdAt >= ? AND createdAt <= ?
+        AND finished_at IS NOT NULL
+    ");
+    $stmt->bind_param("ss", $started_at, $ended_at);
+    $stmt->execute();
+    $bookingStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    // Calculate total income
+    $totalRevenue = (float)$orderStats['order_revenue'] + (float)$bookingStats['booking_revenue'];
+    $totalDiscount = (float)$orderStats['order_discount'];
+    $totalOrders = (int)$orderStats['order_count'];
+    $totalBookings = (int)$bookingStats['booking_count'];
+    
+    // Calculate cash difference
+    $expectedCash = (float)$shift['opening_cash'] + $totalRevenue;
+    $cashDifference = $closing_cash - $expectedCash;
+    
+    // Calculate shift duration
+    $start = new DateTime($started_at);
+    $end = new DateTime($ended_at);
+    $duration = $start->diff($end);
+    $durationHours = $duration->h + ($duration->days * 24) + ($duration->i / 60);
+    
+    // Update shift record
+    $stmt = $conn->prepare("
+        UPDATE shifts 
+        SET ended_at = ?,
+            closing_cash = ?,
+            total_revenue = ?,
+            total_orders = ?,
+            total_bookings = ?,
+            total_discount = ?,
+            cash_difference = ?,
+            duration_hours = ?,
+            notes = CONCAT(COALESCE(notes, ''), '\n', ?),
+            status = 'completed'
+        WHERE id = ?
+    ");
+    $stmt->bind_param(
+        "sddiiiddsi", 
+        $ended_at, 
+        $closing_cash, 
+        $totalRevenue, 
+        $totalOrders, 
+        $totalBookings, 
+        $totalDiscount,
+        $cashDifference,
+        $durationHours,
+        $notes, 
+        $shiftId
+    );
+    $stmt->execute();
+    $stmt->close();
+    
+    respond('success', [
+        'message' => 'Shift ended successfully.',
+        'shift_id' => $shiftId,
+        'admin' => [
+            'id' => $admin['id'],
+            'name' => $admin['name'],
+            'role' => $admin['role']
+        ],
+        'started_at' => $started_at,
+        'ended_at' => $ended_at,
+        'duration_hours' => round($durationHours, 2),
+        'opening_cash' => (float)$shift['opening_cash'],
+        'closing_cash' => $closing_cash,
+        'expected_cash' => round($expectedCash, 2),
+        'cash_difference' => round($cashDifference, 2),
+        'income_summary' => [
+            'total_revenue' => round($totalRevenue, 2),
+            'order_revenue' => round((float)$orderStats['order_revenue'], 2),
+            'booking_revenue' => round((float)$bookingStats['booking_revenue'], 2),
+            'total_discount' => round($totalDiscount, 2),
+            'total_orders' => $totalOrders,
+            'total_bookings' => $totalBookings,
+            'total_transactions' => $totalOrders + $totalBookings
+        ]
+    ]);
+}
+
+/**
+ * Get current active shift details
+ */
+function getCurrentShift(){
+    global $conn;
+    $admin = getAdmin();
+    $adminId = $admin['id'];
+    
+    // Get active shift
+    $stmt = $conn->prepare("
+        SELECT s.*, a.name as admin_name, a.role as admin_role
+        FROM shifts s
+        JOIN admins a ON s.admin_id = a.id
+        WHERE s.admin_id = ? 
+        AND s.ended_at IS NULL 
+        ORDER BY s.started_at DESC 
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $adminId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $shift = $result->fetch_assoc();
+    $stmt->close();
+    
+    if(!$shift){
+        respond('success', ['has_active_shift' => false, 'shift' => null]);
+    }
+    
+    $started_at = $shift['started_at'];
+    $current_time = date('Y-m-d H:i:s');
+    
+    // Calculate current shift stats
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as order_count,
+            COALESCE(SUM(price), 0) as order_revenue,
+            COALESCE(SUM(discount), 0) as order_discount
+        FROM orders 
+        WHERE created_at >= ? AND created_at <= ?
+    ");
+    $stmt->bind_param("ss", $started_at, $current_time);
+    $stmt->execute();
+    $orderStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as booking_count,
+            COALESCE(SUM(price), 0) as booking_revenue
+        FROM room_booking 
+        WHERE createdAt >= ? AND createdAt <= ?
+        AND finished_at IS NOT NULL
+    ");
+    $stmt->bind_param("ss", $started_at, $current_time);
+    $stmt->execute();
+    $bookingStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    // Calculate duration
+    $start = new DateTime($started_at);
+    $now = new DateTime();
+    $duration = $start->diff($now);
+    $durationHours = $duration->h + ($duration->days * 24) + ($duration->i / 60);
+    
+    $shift['current_revenue'] = round((float)$orderStats['order_revenue'] + (float)$bookingStats['booking_revenue'], 2);
+    $shift['current_orders'] = (int)$orderStats['order_count'];
+    $shift['current_bookings'] = (int)$bookingStats['booking_count'];
+    $shift['current_discount'] = round((float)$orderStats['order_discount'], 2);
+    $shift['duration_hours'] = round($durationHours, 2);
+    
+    respond('success', [
+        'has_active_shift' => true, 
+        'shift' => $shift
+    ]);
+}
+
+/**
+ * List all shifts with optional date filtering
+ */
+function listShifts(){
+    global $conn;
+    $admin = getAdmin();
+    
+    // Only superadmin can view all shifts
+    $isSuper = ($admin['role'] == 'superadmin');
+    
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $startDate = isset($input['start_date']) ? $input['start_date'] : null;
+    $endDate = isset($input['end_date']) ? $input['end_date'] : null;
+    
+    // Build query
+    $whereClause = "";
+    $params = [];
+    $types = "";
+    
+    if(!$isSuper){
+        $whereClause = "WHERE s.admin_id = ?";
+        $params[] = $admin['id'];
+        $types .= "i";
+    }
+    
+    if($startDate && $endDate){
+        $dateFilter = $whereClause ? " AND" : " WHERE";
+        $dateFilter .= " DATE(s.started_at) BETWEEN ? AND ?";
+        $whereClause .= $dateFilter;
+        $params[] = $startDate;
+        $params[] = $endDate;
+        $types .= "ss";
+    } elseif($startDate){
+        $dateFilter = $whereClause ? " AND" : " WHERE";
+        $dateFilter .= " DATE(s.started_at) >= ?";
+        $whereClause .= $dateFilter;
+        $params[] = $startDate;
+        $types .= "s";
+    } elseif($endDate){
+        $dateFilter = $whereClause ? " AND" : " WHERE";
+        $dateFilter .= " DATE(s.started_at) <= ?";
+        $whereClause .= $dateFilter;
+        $params[] = $endDate;
+        $types .= "s";
+    }
+    
+    $sql = "
+        SELECT s.*, a.name as admin_name, a.role as admin_role
+        FROM shifts s
+        JOIN admins a ON s.admin_id = a.id
+        $whereClause
+        ORDER BY s.started_at DESC
+    ";
+    
+    if(!empty($params)){
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param($types, ...$params);
+        $stmt->execute();
+        $result = $stmt->get_result();
+    } else {
+        $result = $conn->query($sql);
+    }
+    
+    $shifts = [];
+    while($row = $result->fetch_assoc()){
+        $shifts[] = $row;
+    }
+    
+    if(!empty($params)){
+        $stmt->close();
+    }
+    
+    respond('success', $shifts);
+}
+
+/**
+ * Get detailed shift report by ID
+ */
+function getShiftReport(){
+    global $conn;
+    $admin = getAdmin();
+    
+    $input = requireParams(['shift_id']);
+    $shiftId = (int)$input['shift_id'];
+    
+    // Get shift details
+    $stmt = $conn->prepare("
+        SELECT s.*, a.name as admin_name, a.role as admin_role, a.email as admin_email
+        FROM shifts s
+        JOIN admins a ON s.admin_id = a.id
+        WHERE s.id = ?
+    ");
+    $stmt->bind_param("i", $shiftId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $shift = $result->fetch_assoc();
+    $stmt->close();
+    
+    if(!$shift){
+        respond('error', 'Shift not found.');
+    }
+    
+    // Permission check: only superadmin or shift owner can view
+    if($admin['role'] != 'superadmin' && $shift['admin_id'] != $admin['id']){
+        respond('error', 'Unauthorized. You can only view your own shifts.');
+    }
+    
+    $started_at = $shift['started_at'];
+    $ended_at = $shift['ended_at'] ?? date('Y-m-d H:i:s');
+    
+    // Get detailed order breakdown
+    $stmt = $conn->prepare("
+        SELECT o.*, c.name as customer_name, c.phone as customer_phone
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.id
+        WHERE o.created_at >= ? AND o.created_at <= ?
+        ORDER BY o.created_at ASC
+    ");
+    $stmt->bind_param("ss", $started_at, $ended_at);
+    $stmt->execute();
+    $ordersResult = $stmt->get_result();
+    $orders = [];
+    while($row = $ordersResult->fetch_assoc()){
+        $orders[] = $row;
+    }
+    $stmt->close();
+    
+    // Get detailed booking breakdown
+    $stmt = $conn->prepare("
+        SELECT rb.*, r.name as room_name, c.name as customer_name, c.phone as customer_phone
+        FROM room_booking rb
+        JOIN rooms r ON rb.room_id = r.id
+        LEFT JOIN customers c ON rb.customer_id = c.id
+        WHERE rb.createdAt >= ? AND rb.createdAt <= ?
+        AND rb.finished_at IS NOT NULL
+        ORDER BY rb.createdAt ASC
+    ");
+    $stmt->bind_param("ss", $started_at, $ended_at);
+    $stmt->execute();
+    $bookingsResult = $stmt->get_result();
+    $bookings = [];
+    while($row = $bookingsResult->fetch_assoc()){
+        $bookings[] = $row;
+    }
+    $stmt->close();
+    
+    // Get hourly breakdown
+    $stmt = $conn->prepare("
+        SELECT 
+            HOUR(created_at) as hour,
+            COUNT(*) as order_count,
+            COALESCE(SUM(price), 0) as revenue
+        FROM orders
+        WHERE created_at >= ? AND created_at <= ?
+        GROUP BY HOUR(created_at)
+        ORDER BY hour ASC
+    ");
+    $stmt->bind_param("ss", $started_at, $ended_at);
+    $stmt->execute();
+    $hourlyResult = $stmt->get_result();
+    $hourlyBreakdown = [];
+    while($row = $hourlyResult->fetch_assoc()){
+        $hourlyBreakdown[] = $row;
+    }
+    $stmt->close();
+    
+    $shift['orders'] = $orders;
+    $shift['bookings'] = $bookings;
+    $shift['hourly_breakdown'] = $hourlyBreakdown;
+    
+    respond('success', $shift);
+}
+
+// ============================================================
+// DAILY INCOME ANALYSIS FUNCTIONS
+// ============================================================
+
+/**
+ * Get comprehensive daily income analysis
+ * For printing and detailed reporting
+ */
+function getDailyIncomeAnalysis(){
+    global $conn;
+    $admin = getAdmin();
+    
+    if($admin['role'] != 'superadmin'){
+        respond('error', 'Unauthorized. Only superadmin can view daily income analysis.');
+    }
+    
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $date = isset($input['date']) ? $input['date'] : date('Y-m-d');
+    
+    // Get all shifts for this date
+    $stmt = $conn->prepare("
+        SELECT s.*, a.name as admin_name, a.role as admin_role
+        FROM shifts s
+        JOIN admins a ON s.admin_id = a.id
+        WHERE DATE(s.started_at) = ?
+        ORDER BY s.started_at ASC
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $shiftsResult = $stmt->get_result();
+    $shifts = [];
+    $totalShiftRevenue = 0;
+    while($row = $shiftsResult->fetch_assoc()){
+        $totalShiftRevenue += (float)$row['total_revenue'];
+        $shifts[] = $row;
+    }
+    $stmt->close();
+    
+    // Get all orders for this date
+    $stmt = $conn->prepare("
+        SELECT o.*, c.name as customer_name, c.phone as customer_phone
+        FROM orders o
+        LEFT JOIN customers c ON o.customer_id = c.id
+        WHERE DATE(o.created_at) = ?
+        ORDER BY o.created_at ASC
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $ordersResult = $stmt->get_result();
+    $orders = [];
+    $totalOrderRevenue = 0;
+    $totalOrderDiscount = 0;
+    while($row = $ordersResult->fetch_assoc()){
+        $totalOrderRevenue += (float)$row['price'];
+        $totalOrderDiscount += (float)$row['discount'];
+        $orders[] = $row;
+    }
+    $stmt->close();
+    
+    // Get all room bookings for this date
+    $stmt = $conn->prepare("
+        SELECT rb.*, r.name as room_name, r.ps, c.name as customer_name, c.phone as customer_phone
+        FROM room_booking rb
+        JOIN rooms r ON rb.room_id = r.id
+        LEFT JOIN customers c ON rb.customer_id = c.id
+        WHERE DATE(rb.createdAt) = ?
+        AND rb.finished_at IS NOT NULL
+        ORDER BY rb.createdAt ASC
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $bookingsResult = $stmt->get_result();
+    $bookings = [];
+    $totalBookingRevenue = 0;
+    while($row = $bookingsResult->fetch_assoc()){
+        $totalBookingRevenue += (float)$row['price'];
+        $bookings[] = $row;
+    }
+    $stmt->close();
+    
+    // Calculate profit from orders (cost analysis)
+    $stmt = $conn->prepare("
+        SELECT 
+            COALESCE(SUM(oi.total_price), 0) as gross_revenue,
+            COALESCE(SUM(ci.cost * oi.quantity), 0) as total_cost
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        JOIN cafeteria_items ci ON oi.item_id = ci.id
+        WHERE DATE(o.created_at) = ?
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $profitResult = $stmt->get_result();
+    $profitData = $profitResult->fetch_assoc();
+    $stmt->close();
+    
+    $orderCost = (float)$profitData['total_cost'];
+    $orderProfit = $totalOrderRevenue - $orderCost;
+    
+    // Top selling items for the day
+    $stmt = $conn->prepare("
+        SELECT 
+            ci.id, ci.name, ci.price, ci.cost,
+            SUM(oi.quantity) as quantity_sold,
+            SUM(oi.total_price) as revenue
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        JOIN cafeteria_items ci ON oi.item_id = ci.id
+        WHERE DATE(o.created_at) = ?
+        GROUP BY ci.id
+        ORDER BY quantity_sold DESC
+        LIMIT 10
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $topItemsResult = $stmt->get_result();
+    $topItems = [];
+    while($row = $topItemsResult->fetch_assoc()){
+        $topItems[] = $row;
+    }
+    $stmt->close();
+    
+    // Room utilization for the day
+    $stmt = $conn->prepare("
+        SELECT 
+            r.id, r.name, r.ps,
+            COUNT(rb.id) as booking_count,
+            COALESCE(SUM(rb.price), 0) as revenue,
+            COALESCE(SUM(TIMESTAMPDIFF(MINUTE, rb.started_at, rb.finished_at)), 0) as total_minutes
+        FROM rooms r
+        LEFT JOIN room_booking rb ON r.id = rb.room_id AND DATE(rb.createdAt) = ?
+        GROUP BY r.id
+        ORDER BY revenue DESC
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $roomUtilizationResult = $stmt->get_result();
+    $roomUtilization = [];
+    while($row = $roomUtilizationResult->fetch_assoc()){
+        $row['total_hours'] = round((float)$row['total_minutes'] / 60, 2);
+        $roomUtilization[] = $row;
+    }
+    $stmt->close();
+    
+    // Hourly revenue breakdown
+    $hourlyData = [];
+    for($hour = 0; $hour < 24; $hour++){
+        $hourlyData[$hour] = [
+            'hour' => $hour,
+            'hour_label' => sprintf('%02d:00', $hour),
+            'order_revenue' => 0,
+            'booking_revenue' => 0,
+            'order_count' => 0,
+            'booking_count' => 0
+        ];
+    }
+    
+    // Fill in order data
+    $stmt = $conn->prepare("
+        SELECT 
+            HOUR(created_at) as hour,
+            COUNT(*) as count,
+            COALESCE(SUM(price), 0) as revenue
+        FROM orders
+        WHERE DATE(created_at) = ?
+        GROUP BY HOUR(created_at)
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $hourlyOrdersResult = $stmt->get_result();
+    while($row = $hourlyOrdersResult->fetch_assoc()){
+        $hour = (int)$row['hour'];
+        $hourlyData[$hour]['order_revenue'] = (float)$row['revenue'];
+        $hourlyData[$hour]['order_count'] = (int)$row['count'];
+    }
+    $stmt->close();
+    
+    // Fill in booking data
+    $stmt = $conn->prepare("
+        SELECT 
+            HOUR(createdAt) as hour,
+            COUNT(*) as count,
+            COALESCE(SUM(price), 0) as revenue
+        FROM room_booking
+        WHERE DATE(createdAt) = ? AND finished_at IS NOT NULL
+        GROUP BY HOUR(createdAt)
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $hourlyBookingsResult = $stmt->get_result();
+    while($row = $hourlyBookingsResult->fetch_assoc()){
+        $hour = (int)$row['hour'];
+        $hourlyData[$hour]['booking_revenue'] = (float)$row['revenue'];
+        $hourlyData[$hour]['booking_count'] = (int)$row['count'];
+    }
+    $stmt->close();
+    
+    // Add total for each hour
+    foreach($hourlyData as $hour => $data){
+        $hourlyData[$hour]['total_revenue'] = $data['order_revenue'] + $data['booking_revenue'];
+        $hourlyData[$hour]['total_transactions'] = $data['order_count'] + $data['booking_count'];
+    }
+    
+    // Payment method breakdown (if you have payment methods in orders table)
+    // Assuming cash vs card/other - you may need to adjust based on your schema
+    
+    $totalRevenue = $totalOrderRevenue + $totalBookingRevenue;
+    $totalProfit = $orderProfit + $totalBookingRevenue; // Bookings are pure profit
+    
+    respond('success', [
+        'date' => $date,
+        'summary' => [
+            'total_revenue' => round($totalRevenue, 2),
+            'order_revenue' => round($totalOrderRevenue, 2),
+            'booking_revenue' => round($totalBookingRevenue, 2),
+            'total_cost' => round($orderCost, 2),
+            'total_profit' => round($totalProfit, 2),
+            'profit_margin' => $totalRevenue > 0 ? round(($totalProfit / $totalRevenue) * 100, 2) : 0,
+            'total_discount' => round($totalOrderDiscount, 2),
+            'total_orders' => count($orders),
+            'total_bookings' => count($bookings),
+            'total_transactions' => count($orders) + count($bookings),
+            'avg_order_value' => count($orders) > 0 ? round($totalOrderRevenue / count($orders), 2) : 0,
+            'avg_booking_value' => count($bookings) > 0 ? round($totalBookingRevenue / count($bookings), 2) : 0
+        ],
+        'shifts' => [
+            'count' => count($shifts),
+            'total_shift_revenue' => round($totalShiftRevenue, 2),
+            'details' => $shifts
+        ],
+        'orders' => $orders,
+        'bookings' => $bookings,
+        'top_selling_items' => $topItems,
+        'room_utilization' => $roomUtilization,
+        'hourly_breakdown' => array_values($hourlyData),
+        'peak_hour' =>  findPeakHour($hourlyData),
+        'report_generated_at' => date('Y-m-d H:i:s'),
+        'report_generated_by' => [
+            'id' => $admin['id'],
+            'name' => $admin['name'],
+            'role' => $admin['role']
+        ]
+    ]);
+}
+
+/**
+ * Get printable daily income report (formatted for printing)
+ */
+function getPrintableDailyReport(){
+    global $conn;
+    $admin = getAdmin();
+    
+    if($admin['role'] != 'superadmin'){
+        respond('error', 'Unauthorized. Only superadmin can print reports.');
+    }
+    
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $date = isset($input['date']) ? $input['date'] : date('Y-m-d');
+    
+    // Get the same data as getDailyIncomeAnalysis but format it for printing
+    // We'll call the same logic but return a print-friendly format
+    
+    // This would be the same query logic as above, but simplified for printing
+    // For brevity, I'll create a summary version
+    
+    $dateFormatted = date('l, F j, Y', strtotime($date));
+    
+    // Get summary stats (using prepared statements for security)
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as count,
+            COALESCE(SUM(price), 0) as revenue,
+            COALESCE(SUM(discount), 0) as discount
+        FROM orders 
+        WHERE DATE(created_at) = ?
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $orderStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as count,
+            COALESCE(SUM(price), 0) as revenue
+        FROM room_booking 
+        WHERE DATE(createdAt) = ? AND finished_at IS NOT NULL
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $bookingStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as count,
+            COALESCE(SUM(total_revenue), 0) as revenue,
+            COALESCE(SUM(opening_cash), 0) as opening_cash,
+            COALESCE(SUM(closing_cash), 0) as closing_cash
+        FROM shifts 
+        WHERE DATE(started_at) = ?
+    ");
+    $stmt->bind_param("s", $date);
+    $stmt->execute();
+    $shiftStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    $totalRevenue = (float)$orderStats['revenue'] + (float)$bookingStats['revenue'];
+    
+    $report = [
+        'business_name' => 'X-SPACE STATION',
+        'report_title' => 'DAILY INCOME ANALYSIS',
+        'date' => $dateFormatted,
+        'date_short' => $date,
+        'print_time' => date('Y-m-d H:i:s'),
+        'printed_by' => $admin['name'],
+        
+        'summary' => [
+            'total_revenue' => round($totalRevenue, 2),
+            'order_revenue' => round((float)$orderStats['revenue'], 2),
+            'booking_revenue' => round((float)$bookingStats['revenue'], 2),
+            'total_discount' => round((float)$orderStats['discount'], 2),
+            'net_revenue' => round($totalRevenue - (float)$orderStats['discount'], 2),
+            'total_orders' => (int)$orderStats['count'],
+            'total_bookings' => (int)$bookingStats['count'],
+            'total_transactions' => (int)$orderStats['count'] + (int)$bookingStats['count']
+        ],
+        
+        'shifts' => [
+            'count' => (int)$shiftStats['count'],
+            'total_opening_cash' => round((float)$shiftStats['opening_cash'], 2),
+            'total_closing_cash' => round((float)$shiftStats['closing_cash'], 2),
+            'shift_revenue' => round((float)$shiftStats['revenue'], 2)
+        ],
+        
+        'formatted_for_print' => true
+    ];
+    
+    respond('success', $report);
+}
+
+/**
+ * Helper function to find peak hour from hourly data
+ */
+function findPeakHour($hourlyData){
+    $maxRevenue = 0;
+    $peakHour = 0;
+    
+    foreach($hourlyData as $hour => $data){
+        if($data['total_revenue'] > $maxRevenue){
+            $maxRevenue = $data['total_revenue'];
+            $peakHour = $hour;
+        }
+    }
+    
+    return [
+        'hour' => $peakHour,
+        'hour_label' => sprintf('%02d:00 - %02d:00', $peakHour, ($peakHour + 1) % 24),
+        'revenue' => round($maxRevenue, 2)
+    ];
+}
+
+/**
+ * Get monthly shift summary
+ */
+function getMonthlyShiftSummary(){
+    global $conn;
+    $admin = getAdmin();
+    
+    if($admin['role'] != 'superadmin'){
+        respond('error', 'Unauthorized. Only superadmin can view monthly reports.');
+    }
+    
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $month = isset($input['month']) ? $input['month'] : date('Y-m');
+    
+    // Get all shifts for the month (using prepared statements for security)
+    $stmt = $conn->prepare("
+        SELECT 
+            DATE(started_at) as date,
+            COUNT(*) as shift_count,
+            COALESCE(SUM(total_revenue), 0) as revenue,
+            COALESCE(SUM(total_orders), 0) as orders,
+            COALESCE(SUM(total_bookings), 0) as bookings,
+            COALESCE(SUM(duration_hours), 0) as total_hours
+        FROM shifts
+        WHERE DATE_FORMAT(started_at, '%Y-%m') = ?
+        AND status = 'completed'
+        GROUP BY DATE(started_at)
+        ORDER BY date ASC
+    ");
+    $stmt->bind_param("s", $month);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $dailySummary = [];
+    $totalRevenue = 0;
+    while($row = $result->fetch_assoc()){
+        $totalRevenue += (float)$row['revenue'];
+        $dailySummary[] = $row;
+    }
+    $stmt->close();
+    
+    // Get staff performance for the month
+    $stmt = $conn->prepare("
+        SELECT 
+            a.id, a.name, a.role,
+            COUNT(s.id) as shift_count,
+            COALESCE(SUM(s.total_revenue), 0) as revenue,
+            COALESCE(SUM(s.duration_hours), 0) as hours_worked
+        FROM admins a
+        LEFT JOIN shifts s ON a.id = s.admin_id 
+            AND DATE_FORMAT(s.started_at, '%Y-%m') = ?
+            AND s.status = 'completed'
+        WHERE a.role != 'superadmin'
+        GROUP BY a.id
+        ORDER BY revenue DESC
+    ");
+    $stmt->bind_param("s", $month);
+    $stmt->execute();
+    $staffResult = $stmt->get_result();
+    
+    $staffPerformance = [];
+    while($row = $staffResult->fetch_assoc()){
+        $staffPerformance[] = $row;
+    }
+    $stmt->close();
+    
+    respond('success', [
+        'month' => $month,
+        'month_name' => date('F Y', strtotime($month . '-01')),
+        'summary' => [
+            'total_revenue' => round($totalRevenue, 2),
+            'total_days' => count($dailySummary),
+            'avg_daily_revenue' => count($dailySummary) > 0 ? round($totalRevenue / count($dailySummary), 2) : 0
+        ],
+        'daily_summary' => $dailySummary,
+        'staff_performance' => $staffPerformance
+    ]);
+}
+
