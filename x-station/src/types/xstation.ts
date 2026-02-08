@@ -501,3 +501,242 @@ export interface RevenueAnalytics {
     vs_previous_year: number
   }
 }
+
+// ==================== SHIFT ====================
+
+export type ShiftStatus = 'active' | 'completed' | 'cancelled'
+
+export interface Shift {
+  id: number
+  admin_id: number
+  admin_name: string
+  admin_role: string
+  admin_email?: string
+  started_at: string
+  ended_at: string | null
+  opening_cash: number
+  closing_cash: number
+  total_revenue: number
+  total_orders: number
+  total_bookings: number
+  total_discount: number
+  cash_difference: number
+  duration_hours: number
+  notes: string
+  status: ShiftStatus
+}
+
+export interface CurrentShift {
+  id: number
+  admin_id: number
+  admin_name: string
+  admin_role: string
+  started_at: string
+  ended_at: null
+  opening_cash: number
+  notes: string
+  status: 'active'
+  current_revenue: number
+  current_orders: number
+  current_bookings: number
+  current_discount: number
+  duration_hours: number
+}
+
+export interface CurrentShiftResponse {
+  has_active_shift: boolean
+  shift: CurrentShift | null
+}
+
+export interface ShiftIncomeSummary {
+  total_revenue: number
+  order_revenue: number
+  booking_revenue: number
+  total_discount: number
+  total_orders: number
+  total_bookings: number
+  total_transactions: number
+}
+
+export interface ShiftEndResponse {
+  message: string
+  shift_id: number
+  admin: {
+    id: number
+    name: string
+    role: string
+  }
+  started_at: string
+  ended_at: string
+  duration_hours: number
+  opening_cash: number
+  closing_cash: number
+  expected_cash: number
+  cash_difference: number
+  income_summary: ShiftIncomeSummary
+}
+
+export interface ShiftOrder {
+  id: number
+  customer_id: number
+  customer_name: string
+  customer_phone: string
+  price: number
+  discount: number
+  created_at: string
+}
+
+export interface ShiftBooking {
+  id: number
+  room_id: number
+  room_name: string
+  customer_id: number
+  customer_name: string
+  customer_phone: string
+  price: number
+  started_at: string
+  finished_at: string
+  createdAt: string
+}
+
+export interface HourlyBreakdown {
+  hour: number
+  hour_label?: string
+  order_count?: number
+  booking_count?: number
+  order_revenue?: number
+  booking_revenue?: number
+  revenue?: number
+  total_revenue?: number
+  total_transactions?: number
+}
+
+export interface ShiftReport extends Shift {
+  orders: ShiftOrder[]
+  bookings: ShiftBooking[]
+  hourly_breakdown: HourlyBreakdown[]
+}
+
+// ==================== DAILY INCOME ANALYSIS ====================
+
+export interface TopSellingItem {
+  id: number
+  name: string
+  price: number
+  cost: number
+  quantity_sold: number
+  revenue: number
+}
+
+export interface RoomUtilization {
+  id: number
+  name: string
+  ps: string
+  booking_count: number
+  revenue: number
+  total_minutes: number
+  total_hours: number
+}
+
+export interface PeakHour {
+  hour: number
+  hour_label: string
+  revenue: number
+}
+
+export interface DailyIncomeShiftSummary {
+  count: number
+  total_shift_revenue: number
+  details: Array<{
+    id: number
+    admin_name: string
+    started_at: string
+    ended_at: string
+    total_revenue: number
+  }>
+}
+
+export interface DailyIncomeSummary {
+  total_revenue: number
+  order_revenue: number
+  booking_revenue: number
+  total_cost: number
+  total_profit: number
+  profit_margin: number
+  total_discount: number
+  total_orders: number
+  total_bookings: number
+  total_transactions: number
+  avg_order_value: number
+  avg_booking_value: number
+}
+
+export interface DailyIncomeAnalysis {
+  date: string
+  summary: DailyIncomeSummary
+  shifts: DailyIncomeShiftSummary
+  orders: ShiftOrder[]
+  bookings: ShiftBooking[]
+  top_selling_items: TopSellingItem[]
+  room_utilization: RoomUtilization[]
+  hourly_breakdown: HourlyBreakdown[]
+  peak_hour: PeakHour
+  report_generated_at: string
+  report_generated_by: {
+    id: number
+    name: string
+    role: string
+  }
+}
+
+export interface PrintableDailyReport {
+  business_name: string
+  report_title: string
+  date: string
+  date_short: string
+  print_time: string
+  printed_by: string
+  summary: {
+    total_revenue: number
+    order_revenue: number
+    booking_revenue: number
+    total_discount: number
+    net_revenue: number
+    total_orders: number
+    total_bookings: number
+    total_transactions: number
+  }
+  shifts: {
+    count: number
+    total_opening_cash: number
+    total_closing_cash: number
+    shift_revenue: number
+  }
+  formatted_for_print: boolean
+}
+
+export interface MonthlyShiftSummary {
+  month: string
+  month_name: string
+  summary: {
+    total_revenue: number
+    total_days: number
+    avg_daily_revenue: number
+  }
+  daily_summary: Array<{
+    date: string
+    shift_count: number
+    revenue: number
+    orders: number
+    bookings: number
+    total_hours: number
+  }>
+  staff_performance: Array<{
+    id: number
+    name: string
+    role: string
+    shift_count: number
+    revenue: number
+    hours_worked: number
+  }>
+}

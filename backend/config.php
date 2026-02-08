@@ -64,7 +64,7 @@ function getAdmin(){
     if(!$token){
         respond('error', 'No authorization token provided.');
     }
-    $stmt = $conn->prepare("SELECT admin_id FROM session WHERE token = ? AND expire_at > NOW()");
+    $stmt = $conn->prepare("SELECT admin_id FROM session WHERE token = ? AND expire_at > NOW() AND (status = 'active' OR status IS NULL)");
     $stmt->bind_param("s", $token);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -85,7 +85,6 @@ function getAdmin(){
     $user = $result->fetch_assoc();
     $stmt->close();
     return $user;
-
 }
 
 

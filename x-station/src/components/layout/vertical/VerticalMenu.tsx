@@ -122,16 +122,25 @@ const VerticalMenu = ({ dictionary, scrollMenu }: Props) => {
           </MenuItem>
         </MenuSection>
 
-        {/* Superadmin Only */}
+        {/* Superadmin Only - Analytics & Management */}
         {isSuperadmin && (
-          <MenuSection label={nav.management}>
-            <MenuItem href={`/${lang}/analytics`} icon={<i className='tabler-chart-bar' />}>
-              {nav.analytics}
-            </MenuItem>
-            <MenuItem href={`/${lang}/admins`} icon={<i className='tabler-user-cog' />}>
-              {nav.admins}
-            </MenuItem>
-          </MenuSection>
+          <>
+            <MenuSection label={nav.analytics}>
+              <SubMenu label={nav.analytics} icon={<i className='tabler-chart-bar' />}>
+                <MenuItem href={`/${lang}/analytics`} icon={<i className='tabler-dashboard' />}>
+                  {nav.dashboard || 'Dashboard'}
+                </MenuItem>
+                <MenuItem href={`/${lang}/analytics/daily-income`} icon={<i className='tabler-report-money' />}>
+                  {nav.dailyIncome}
+                </MenuItem>
+              </SubMenu>
+            </MenuSection>
+            <MenuSection label={nav.management}>
+              <MenuItem href={`/${lang}/admins`} icon={<i className='tabler-user-cog' />}>
+                {nav.admins}
+              </MenuItem>
+            </MenuSection>
+          </>
         )}
       </Menu>
     </ScrollWrapper>

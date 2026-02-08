@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { authApi, setToken, removeToken, getStoredAdmin, setStoredAdmin } from '@/services/api'
+import { authApi, setToken, removeToken, getStoredAdmin, setStoredAdmin, getToken } from '@/services/api'
 import type { Admin, AdminRole } from '@/types/xstation'
 import { getLocalizedUrl } from '@/utils/i18n'
 import type { Locale } from '@/configs/i18n'
@@ -32,8 +32,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const validateSession = useCallback(async (): Promise<boolean> => {
     try {
+      // Check if we have stored admin data and token
       const storedAdmin = getStoredAdmin()
-      if (!storedAdmin) {
+      const token = getToken()
+      
+      if (!storedAdmin || !token) {
+        console.log('No valid stored session found')
+        removeToken()
+        setAdmin(null)
         setIsLoading(false)
         return false
       }
@@ -45,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false)
         return true
       } else {
+        console.log('Session validation failed:', response.message)
         removeToken()
         setAdmin(null)
         setIsLoading(false)
@@ -69,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStoredAdmin(response.data.admin)
         setAdmin(response.data.admin)
         setIsLoading(false)
+        
+        // Small delay to ensure state is fully updated before redirect
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
         return { success: true }
       } else {
         setIsLoading(false)
@@ -83,10 +94,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await authApi.logout()
+      // Call logout endpoint which ends shift on backend
+      const response = await authApi.logout()
+      
+      if (response.status === 'success') {
+        // Only clear local state after successful backend logout
+        removeToken()
+        setAdmin(null)
+        router.push(getLocalizedUrl('/login', locale))
+      } else {
+        // If backend fails but we still want to allow logout, show warning and proceed
+        console.warn('Logout endpoint failed:', response.message)
+        removeToken()
+        setAdmin(null)
+        router.push(getLocalizedUrl('/login', locale))
+      }
     } catch (error) {
       console.error('Logout error:', error)
-    } finally {
+      // On network error, still allow local logout
       removeToken()
       setAdmin(null)
       router.push(getLocalizedUrl('/login', locale))

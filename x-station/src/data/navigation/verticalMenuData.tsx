@@ -119,6 +119,11 @@ const verticalMenuData = (
             href: '/analytics/overview'
           },
           {
+            label: dictionary['navigation'].dailyIncome,
+            icon: 'tabler-report-money',
+            href: '/analytics/daily-income'
+          },
+          {
             label: dictionary['navigation'].revenue,
             icon: 'tabler-currency-dollar',
             href: '/analytics/revenue'

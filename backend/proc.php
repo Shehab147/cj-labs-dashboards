@@ -65,7 +65,36 @@ function login(){
     $stmt->execute();
     $stmt->close();
     setcookie('x-authorization', $token, time() + 86400, '/', '', false, true);
-    respond('success', ['token' => $token, 'admin' => $admin]);
+if ($admin['role'] == 'superadmin') {
+        // For superadmin, we can return all their active sessions
+        $stmt = $conn->prepare("SELECT id, token, expire_at FROM session WHERE admin_id = ? AND status = 'active'");
+        $stmt->bind_param("i", $admin['id']);
+        $stmt->execute();
+        $sessionsResult = $stmt->get_result();
+        $sessions = [];
+        while ($row = $sessionsResult->fetch_assoc()) {
+            $sessions[] = [
+                'id' => $row['id'],
+                'token' => $row['token'],
+                'expire_at' => $row['expire_at']
+            ];
+        }
+        $stmt->close();
+        
+        respond('success', [
+            'token' => $token, 
+            'admin' => $admin,
+            'sessions' => $sessions
+        ]);
+    }
+    // Start shift and get result
+    $shiftResult = startShift($admin, false); // false = don't respond, return data
+    
+    respond('success', [
+        'token' => $token, 
+        'admin' => $admin,
+        'shift' => $shiftResult
+    ]);
 }
 function logout(){
     global $conn;
@@ -73,12 +102,271 @@ function logout(){
     if(!$token){
         respond('error', 'No authorization token provided.');
     }
+    
+    // End shift BEFORE invalidating session (so getAdmin() still works)
+    endShift(null, false);
+    
+    // Now invalidate the session
     $stmt = $conn->prepare("UPDATE session SET status = 'inactive' WHERE token = ?");
     $stmt->bind_param("s", $token);
     $stmt->execute();
     $stmt->close();
     setcookie('x-authorization', '', time() - 3600, '/', '', false, true);
     respond('success', 'Logged out successfully.'); 
+}
+
+function startShift($admin = null, $shouldRespond = true){
+    global $conn;
+    if ($admin === null) {
+        $adminData = getAdmin();
+        $adminId = $adminData['id'];
+    } else {
+        // If $admin is passed as an array, use it; if it's just an ID, use it directly
+        if (is_array($admin)) {
+            $adminId = $admin['id'];
+        } else {
+            $adminId = $admin; // Admin ID passed directly
+        }
+    }
+    
+    
+    // Check if admin already has an active shift
+    $stmt = $conn->prepare("
+        SELECT id, started_at 
+        FROM shifts 
+        WHERE admin_id = ? 
+        AND ended_at IS NULL 
+        ORDER BY started_at DESC 
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $adminId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $activeShift = $result->fetch_assoc();
+    $stmt->close();
+    
+    if($activeShift){
+        // Auto-end the existing active shift before starting a new one
+        $current_time = date('Y-m-d H:i:s');
+        $shiftId = $activeShift['id'];
+        $started_at_old = $activeShift['started_at'];
+        
+        // Calculate duration and set reasonable defaults
+        $start = new DateTime($started_at_old);
+        $end = new DateTime($current_time);
+        $duration = $start->diff($end);
+        $durationHours = $duration->h + ($duration->days * 24) + ($duration->i / 60);
+        
+        // End the previous shift with default values
+        $stmt = $conn->prepare("
+            UPDATE shifts 
+            SET ended_at = ?,
+                closing_cash = opening_cash,
+                total_revenue = 0,
+                total_orders = 0,
+                total_bookings = 0,
+                total_discount = 0,
+                cash_difference = 0,
+                duration_hours = ?,
+                notes = CONCAT(COALESCE(notes, ''), '\nAuto-ended due to new login at ', ?),
+                status = 'completed'
+            WHERE id = ?
+        ");
+        $stmt->bind_param("sdsi", $current_time, $durationHours, $current_time, $shiftId);
+        $stmt->execute();
+        $stmt->close();
+    }
+    
+    // Get input for optional start time and opening cash
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $started_at = isset($input['started_at']) ? $input['started_at'] : date('Y-m-d H:i:s');
+    $opening_cash = isset($input['opening_cash']) ? (float)$input['opening_cash'] : 0;
+    $notes = isset($input['notes']) ? $input['notes'] : '';
+    
+    // Get admin data for response (if not already available)
+    if ($admin === null || !is_array($admin)) {
+        $adminData = getAdmin();
+    } else {
+        $adminData = $admin;
+    }
+    
+    // Create new shift
+    $stmt = $conn->prepare("
+        INSERT INTO shifts (admin_id, started_at, opening_cash, notes, status) 
+        VALUES (?, ?, ?, ?, 'active')
+    ");
+    $stmt->bind_param("isds", $adminId, $started_at, $opening_cash, $notes);
+    $stmt->execute();
+    $shiftId = $conn->insert_id;
+    $stmt->close();
+    
+    $result = [
+        'message' => 'Shift started successfully.',
+        'shift_id' => $shiftId,
+        'admin' => [
+            'id' => $adminData['id'],
+            'name' => $adminData['name'],
+            'role' => $adminData['role']
+        ],
+        'started_at' => $started_at,
+        'opening_cash' => $opening_cash,
+        'notes' => $notes
+    ];
+    
+    if ($shouldRespond) {
+        respond('success', $result);
+    } else {
+        return $result;
+    }
+}
+
+/**
+ * End current shift
+ * Closes the active shift and calculates all income/expenses
+ */
+function endShift($admin = null, $shouldRespond = true){
+    global $conn;
+    
+    if ($admin === null) {
+        $admin = getAdmin();
+    }
+    $adminId = $admin['id'];
+    
+    // Get active shift
+    $stmt = $conn->prepare("
+        SELECT * 
+        FROM shifts 
+        WHERE admin_id = ? 
+        AND ended_at IS NULL 
+        ORDER BY started_at DESC 
+        LIMIT 1
+    ");
+    $stmt->bind_param("i", $adminId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $shift = $result->fetch_assoc();
+    $stmt->close();
+    
+    if(!$shift){
+        if ($shouldRespond) {
+            respond('error', 'No active shift found.');
+        }
+        return; // Silently return if called from logout with no active shift
+    }
+    
+    $shiftId = $shift['id'];
+    $started_at = $shift['started_at'];
+    
+    // Get input for end time and closing cash
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $ended_at = isset($input['ended_at']) ? $input['ended_at'] : date('Y-m-d H:i:s');
+    $closing_cash = isset($input['closing_cash']) ? (float)$input['closing_cash'] : 0;
+    $notes = isset($input['notes']) ? $input['notes'] : '';
+    
+    // Calculate shift income from orders during this shift
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as order_count,
+            COALESCE(SUM(price), 0) as order_revenue,
+            COALESCE(SUM(discount), 0) as order_discount
+        FROM orders 
+        WHERE created_at >= ? AND created_at <= ?
+    ");
+    $stmt->bind_param("ss", $started_at, $ended_at);
+    $stmt->execute();
+    $orderStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    // Calculate shift income from room bookings during this shift
+    $stmt = $conn->prepare("
+        SELECT 
+            COUNT(*) as booking_count,
+            COALESCE(SUM(price), 0) as booking_revenue
+        FROM room_booking 
+        WHERE createdAt >= ? AND createdAt <= ?
+        AND finished_at IS NOT NULL
+    ");
+    $stmt->bind_param("ss", $started_at, $ended_at);
+    $stmt->execute();
+    $bookingStats = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    // Calculate total income
+    $totalRevenue = (float)$orderStats['order_revenue'] + (float)$bookingStats['booking_revenue'];
+    $totalDiscount = (float)$orderStats['order_discount'];
+    $totalOrders = (int)$orderStats['order_count'];
+    $totalBookings = (int)$bookingStats['booking_count'];
+    
+    // Calculate cash difference
+    $expectedCash = (float)$shift['opening_cash'] + $totalRevenue;
+    $cashDifference = $closing_cash - $expectedCash;
+    
+    // Calculate shift duration
+    $start = new DateTime($started_at);
+    $end = new DateTime($ended_at);
+    $duration = $start->diff($end);
+    $durationHours = $duration->h + ($duration->days * 24) + ($duration->i / 60);
+    
+    // Update shift record
+    $stmt = $conn->prepare("
+        UPDATE shifts 
+        SET ended_at = ?,
+            closing_cash = ?,
+            total_revenue = ?,
+            total_orders = ?,
+            total_bookings = ?,
+            total_discount = ?,
+            cash_difference = ?,
+            duration_hours = ?,
+            notes = CONCAT(COALESCE(notes, ''), '\n', ?),
+            status = 'completed'
+        WHERE id = ?
+    ");
+    $stmt->bind_param(
+        "sddiiiddsi", 
+        $ended_at, 
+        $closing_cash, 
+        $totalRevenue, 
+        $totalOrders, 
+        $totalBookings, 
+        $totalDiscount,
+        $cashDifference,
+        $durationHours,
+        $notes, 
+        $shiftId
+    );
+    $stmt->execute();
+    $stmt->close();
+    
+    if (!$shouldRespond) {
+        return; // Silently return if called from logout
+    }
+    
+    respond('success', [
+        'message' => 'Shift ended successfully.',
+        'shift_id' => $shiftId,
+        'admin' => [
+            'id' => $admin['id'],
+            'name' => $admin['name'],
+            'role' => $admin['role']
+        ],
+        'started_at' => $started_at,
+        'ended_at' => $ended_at,
+        'duration_hours' => round($durationHours, 2),
+        'opening_cash' => (float)$shift['opening_cash'],
+        'closing_cash' => $closing_cash,
+        'expected_cash' => round($expectedCash, 2),
+        'cash_difference' => round($cashDifference, 2),
+        'income_summary' => [
+            'total_revenue' => round($totalRevenue, 2),
+            'order_revenue' => round((float)$orderStats['order_revenue'], 2),
+            'booking_revenue' => round((float)$bookingStats['booking_revenue'], 2),
+            'total_discount' => round($totalDiscount, 2),
+            'total_orders' => $totalOrders,
+            'total_bookings' => $totalBookings,
+            'total_transactions' => $totalOrders + $totalBookings
+        ]
+    ]);
 }
 
 function addAdmin(){
@@ -4466,198 +4754,6 @@ function timerUpdate(){
  * Start a new shift
  * Creates a new shift record for the current admin
  */
-function startShift(){
-    global $conn;
-    $admin = getAdmin();
-    $adminId = $admin['id'];
-    
-    // Check if admin already has an active shift
-    $stmt = $conn->prepare("
-        SELECT id, started_at 
-        FROM shifts 
-        WHERE admin_id = ? 
-        AND ended_at IS NULL 
-        ORDER BY started_at DESC 
-        LIMIT 1
-    ");
-    $stmt->bind_param("i", $adminId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $activeShift = $result->fetch_assoc();
-    $stmt->close();
-    
-    if($activeShift){
-        respond('error', 'You already have an active shift started at ' . $activeShift['started_at']);
-    }
-    
-    // Get input for optional start time and opening cash
-    $input = json_decode(file_get_contents('php://input'), true) ?? [];
-    $started_at = isset($input['started_at']) ? $input['started_at'] : date('Y-m-d H:i:s');
-    $opening_cash = isset($input['opening_cash']) ? (float)$input['opening_cash'] : 0;
-    $notes = isset($input['notes']) ? $input['notes'] : '';
-    
-    // Create new shift
-    $stmt = $conn->prepare("
-        INSERT INTO shifts (admin_id, started_at, opening_cash, notes, status) 
-        VALUES (?, ?, ?, ?, 'active')
-    ");
-    $stmt->bind_param("isds", $adminId, $started_at, $opening_cash, $notes);
-    $stmt->execute();
-    $shiftId = $conn->insert_id;
-    $stmt->close();
-    
-    respond('success', [
-        'message' => 'Shift started successfully.',
-        'shift_id' => $shiftId,
-        'admin' => [
-            'id' => $admin['id'],
-            'name' => $admin['name'],
-            'role' => $admin['role']
-        ],
-        'started_at' => $started_at,
-        'opening_cash' => $opening_cash,
-        'notes' => $notes
-    ]);
-}
-
-/**
- * End current shift
- * Closes the active shift and calculates all income/expenses
- */
-function endShift(){
-    global $conn;
-    $admin = getAdmin();
-    $adminId = $admin['id'];
-    
-    // Get active shift
-    $stmt = $conn->prepare("
-        SELECT * 
-        FROM shifts 
-        WHERE admin_id = ? 
-        AND ended_at IS NULL 
-        ORDER BY started_at DESC 
-        LIMIT 1
-    ");
-    $stmt->bind_param("i", $adminId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $shift = $result->fetch_assoc();
-    $stmt->close();
-    
-    if(!$shift){
-        respond('error', 'No active shift found.');
-    }
-    
-    $shiftId = $shift['id'];
-    $started_at = $shift['started_at'];
-    
-    // Get input for end time and closing cash
-    $input = json_decode(file_get_contents('php://input'), true) ?? [];
-    $ended_at = isset($input['ended_at']) ? $input['ended_at'] : date('Y-m-d H:i:s');
-    $closing_cash = isset($input['closing_cash']) ? (float)$input['closing_cash'] : 0;
-    $notes = isset($input['notes']) ? $input['notes'] : '';
-    
-    // Calculate shift income from orders during this shift
-    $stmt = $conn->prepare("
-        SELECT 
-            COUNT(*) as order_count,
-            COALESCE(SUM(price), 0) as order_revenue,
-            COALESCE(SUM(discount), 0) as order_discount
-        FROM orders 
-        WHERE created_at >= ? AND created_at <= ?
-    ");
-    $stmt->bind_param("ss", $started_at, $ended_at);
-    $stmt->execute();
-    $orderStats = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    
-    // Calculate shift income from room bookings during this shift
-    $stmt = $conn->prepare("
-        SELECT 
-            COUNT(*) as booking_count,
-            COALESCE(SUM(price), 0) as booking_revenue
-        FROM room_booking 
-        WHERE createdAt >= ? AND createdAt <= ?
-        AND finished_at IS NOT NULL
-    ");
-    $stmt->bind_param("ss", $started_at, $ended_at);
-    $stmt->execute();
-    $bookingStats = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    
-    // Calculate total income
-    $totalRevenue = (float)$orderStats['order_revenue'] + (float)$bookingStats['booking_revenue'];
-    $totalDiscount = (float)$orderStats['order_discount'];
-    $totalOrders = (int)$orderStats['order_count'];
-    $totalBookings = (int)$bookingStats['booking_count'];
-    
-    // Calculate cash difference
-    $expectedCash = (float)$shift['opening_cash'] + $totalRevenue;
-    $cashDifference = $closing_cash - $expectedCash;
-    
-    // Calculate shift duration
-    $start = new DateTime($started_at);
-    $end = new DateTime($ended_at);
-    $duration = $start->diff($end);
-    $durationHours = $duration->h + ($duration->days * 24) + ($duration->i / 60);
-    
-    // Update shift record
-    $stmt = $conn->prepare("
-        UPDATE shifts 
-        SET ended_at = ?,
-            closing_cash = ?,
-            total_revenue = ?,
-            total_orders = ?,
-            total_bookings = ?,
-            total_discount = ?,
-            cash_difference = ?,
-            duration_hours = ?,
-            notes = CONCAT(COALESCE(notes, ''), '\n', ?),
-            status = 'completed'
-        WHERE id = ?
-    ");
-    $stmt->bind_param(
-        "sddiiiddsi", 
-        $ended_at, 
-        $closing_cash, 
-        $totalRevenue, 
-        $totalOrders, 
-        $totalBookings, 
-        $totalDiscount,
-        $cashDifference,
-        $durationHours,
-        $notes, 
-        $shiftId
-    );
-    $stmt->execute();
-    $stmt->close();
-    
-    respond('success', [
-        'message' => 'Shift ended successfully.',
-        'shift_id' => $shiftId,
-        'admin' => [
-            'id' => $admin['id'],
-            'name' => $admin['name'],
-            'role' => $admin['role']
-        ],
-        'started_at' => $started_at,
-        'ended_at' => $ended_at,
-        'duration_hours' => round($durationHours, 2),
-        'opening_cash' => (float)$shift['opening_cash'],
-        'closing_cash' => $closing_cash,
-        'expected_cash' => round($expectedCash, 2),
-        'cash_difference' => round($cashDifference, 2),
-        'income_summary' => [
-            'total_revenue' => round($totalRevenue, 2),
-            'order_revenue' => round((float)$orderStats['order_revenue'], 2),
-            'booking_revenue' => round((float)$bookingStats['booking_revenue'], 2),
-            'total_discount' => round($totalDiscount, 2),
-            'total_orders' => $totalOrders,
-            'total_bookings' => $totalBookings,
-            'total_transactions' => $totalOrders + $totalBookings
-        ]
-    ]);
-}
 
 /**
  * Get current active shift details
@@ -4925,36 +5021,79 @@ function getDailyIncomeAnalysis(){
     }
     
     $input = json_decode(file_get_contents('php://input'), true) ?? [];
-    $date = isset($input['date']) ? $input['date'] : date('Y-m-d');
     
-    // Get all shifts for this date
+    // Support date range: start_date and end_date, fallback to single date or today
+    $startDate = isset($input['start_date']) ? $input['start_date'] : (isset($input['date']) ? $input['date'] : date('Y-m-d'));
+    $endDate = isset($input['end_date']) ? $input['end_date'] : $startDate;
+    
+    // Get all shifts for this date range
     $stmt = $conn->prepare("
         SELECT s.*, a.name as admin_name, a.role as admin_role
         FROM shifts s
         JOIN admins a ON s.admin_id = a.id
-        WHERE DATE(s.started_at) = ?
+        WHERE DATE(s.started_at) BETWEEN ? AND ?
         ORDER BY s.started_at ASC
     ");
-    $stmt->bind_param("s", $date);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
     $shiftsResult = $stmt->get_result();
     $shifts = [];
     $totalShiftRevenue = 0;
+    
     while($row = $shiftsResult->fetch_assoc()){
+        // Calculate real-time revenue for each shift
+        $shiftStart = $row['started_at'];
+        $shiftEnd = $row['ended_at'] ?? date('Y-m-d H:i:s'); // Use current time if still active
+        
+        // Get orders revenue during this shift
+        $orderStmt = $conn->prepare("
+            SELECT COALESCE(SUM(price), 0) as order_revenue, COUNT(*) as order_count
+            FROM orders 
+            WHERE created_at >= ? AND created_at <= ?
+        ");
+        $orderStmt->bind_param("ss", $shiftStart, $shiftEnd);
+        $orderStmt->execute();
+        $orderData = $orderStmt->get_result()->fetch_assoc();
+        $orderStmt->close();
+        
+        // Get bookings revenue during this shift
+        $bookingStmt = $conn->prepare("
+            SELECT COALESCE(SUM(price), 0) as booking_revenue, COUNT(*) as booking_count
+            FROM room_booking 
+            WHERE createdAt >= ? AND createdAt <= ? AND finished_at IS NOT NULL
+        ");
+        $bookingStmt->bind_param("ss", $shiftStart, $shiftEnd);
+        $bookingStmt->execute();
+        $bookingData = $bookingStmt->get_result()->fetch_assoc();
+        $bookingStmt->close();
+        
+        // Calculate total revenue for this shift
+        $shiftRevenue = (float)$orderData['order_revenue'] + (float)$bookingData['booking_revenue'];
+        $row['calculated_revenue'] = round($shiftRevenue, 2);
+        $row['order_revenue'] = round((float)$orderData['order_revenue'], 2);
+        $row['booking_revenue'] = round((float)$bookingData['booking_revenue'], 2);
+        $row['order_count'] = (int)$orderData['order_count'];
+        $row['booking_count'] = (int)$bookingData['booking_count'];
+        
+        // Use calculated revenue if total_revenue is 0 or null (for active shifts)
+        if(empty($row['total_revenue']) || $row['total_revenue'] == 0) {
+            $row['total_revenue'] = $shiftRevenue;
+        }
+        
         $totalShiftRevenue += (float)$row['total_revenue'];
         $shifts[] = $row;
     }
     $stmt->close();
     
-    // Get all orders for this date
+    // Get all orders for this date range
     $stmt = $conn->prepare("
         SELECT o.*, c.name as customer_name, c.phone as customer_phone
         FROM orders o
         LEFT JOIN customers c ON o.customer_id = c.id
-        WHERE DATE(o.created_at) = ?
+        WHERE DATE(o.created_at) BETWEEN ? AND ?
         ORDER BY o.created_at ASC
     ");
-    $stmt->bind_param("s", $date);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
     $ordersResult = $stmt->get_result();
     $orders = [];
@@ -4967,17 +5106,17 @@ function getDailyIncomeAnalysis(){
     }
     $stmt->close();
     
-    // Get all room bookings for this date
+    // Get all room bookings for this date range
     $stmt = $conn->prepare("
         SELECT rb.*, r.name as room_name, r.ps, c.name as customer_name, c.phone as customer_phone
         FROM room_booking rb
         JOIN rooms r ON rb.room_id = r.id
         LEFT JOIN customers c ON rb.customer_id = c.id
-        WHERE DATE(rb.createdAt) = ?
+        WHERE DATE(rb.createdAt) BETWEEN ? AND ?
         AND rb.finished_at IS NOT NULL
         ORDER BY rb.createdAt ASC
     ");
-    $stmt->bind_param("s", $date);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
     $bookingsResult = $stmt->get_result();
     $bookings = [];
@@ -4996,9 +5135,9 @@ function getDailyIncomeAnalysis(){
         FROM order_items oi
         JOIN orders o ON oi.order_id = o.id
         JOIN cafeteria_items ci ON oi.item_id = ci.id
-        WHERE DATE(o.created_at) = ?
+        WHERE DATE(o.created_at) BETWEEN ? AND ?
     ");
-    $stmt->bind_param("s", $date);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
     $profitResult = $stmt->get_result();
     $profitData = $profitResult->fetch_assoc();
@@ -5007,7 +5146,7 @@ function getDailyIncomeAnalysis(){
     $orderCost = (float)$profitData['total_cost'];
     $orderProfit = $totalOrderRevenue - $orderCost;
     
-    // Top selling items for the day
+    // Top selling items for the date range
     $stmt = $conn->prepare("
         SELECT 
             ci.id, ci.name, ci.price, ci.cost,
@@ -5016,12 +5155,12 @@ function getDailyIncomeAnalysis(){
         FROM order_items oi
         JOIN orders o ON oi.order_id = o.id
         JOIN cafeteria_items ci ON oi.item_id = ci.id
-        WHERE DATE(o.created_at) = ?
+        WHERE DATE(o.created_at) BETWEEN ? AND ?
         GROUP BY ci.id
         ORDER BY quantity_sold DESC
         LIMIT 10
     ");
-    $stmt->bind_param("s", $date);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
     $topItemsResult = $stmt->get_result();
     $topItems = [];
@@ -5030,7 +5169,7 @@ function getDailyIncomeAnalysis(){
     }
     $stmt->close();
     
-    // Room utilization for the day
+    // Room utilization for the date range
     $stmt = $conn->prepare("
         SELECT 
             r.id, r.name, r.ps,
@@ -5038,11 +5177,11 @@ function getDailyIncomeAnalysis(){
             COALESCE(SUM(rb.price), 0) as revenue,
             COALESCE(SUM(TIMESTAMPDIFF(MINUTE, rb.started_at, rb.finished_at)), 0) as total_minutes
         FROM rooms r
-        LEFT JOIN room_booking rb ON r.id = rb.room_id AND DATE(rb.createdAt) = ?
+        LEFT JOIN room_booking rb ON r.id = rb.room_id AND DATE(rb.createdAt) BETWEEN ? AND ?
         GROUP BY r.id
         ORDER BY revenue DESC
     ");
-    $stmt->bind_param("s", $date);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
     $roomUtilizationResult = $stmt->get_result();
     $roomUtilization = [];
@@ -5055,9 +5194,12 @@ function getDailyIncomeAnalysis(){
     // Hourly revenue breakdown
     $hourlyData = [];
     for($hour = 0; $hour < 24; $hour++){
+        $period = $hour >= 12 ? 'PM' : 'AM';
+        $hour12 = $hour % 12;
+        if($hour12 === 0) $hour12 = 12;
         $hourlyData[$hour] = [
             'hour' => $hour,
-            'hour_label' => sprintf('%02d:00', $hour),
+            'hour_label' => $hour12 . ' ' . $period,
             'order_revenue' => 0,
             'booking_revenue' => 0,
             'order_count' => 0,
@@ -5072,16 +5214,16 @@ function getDailyIncomeAnalysis(){
             COUNT(*) as count,
             COALESCE(SUM(price), 0) as revenue
         FROM orders
-        WHERE DATE(created_at) = ?
+        WHERE DATE(created_at) BETWEEN ? AND ?
         GROUP BY HOUR(created_at)
     ");
-    $stmt->bind_param("s", $date);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
     $hourlyOrdersResult = $stmt->get_result();
     while($row = $hourlyOrdersResult->fetch_assoc()){
         $hour = (int)$row['hour'];
-        $hourlyData[$hour]['order_revenue'] = (float)$row['revenue'];
-        $hourlyData[$hour]['order_count'] = (int)$row['count'];
+        $hourlyData[$hour]['order_revenue'] += (float)$row['revenue'];
+        $hourlyData[$hour]['order_count'] += (int)$row['count'];
     }
     $stmt->close();
     
@@ -5092,10 +5234,10 @@ function getDailyIncomeAnalysis(){
             COUNT(*) as count,
             COALESCE(SUM(price), 0) as revenue
         FROM room_booking
-        WHERE DATE(createdAt) = ? AND finished_at IS NOT NULL
+        WHERE DATE(createdAt) BETWEEN ? AND ? AND finished_at IS NOT NULL
         GROUP BY HOUR(createdAt)
     ");
-    $stmt->bind_param("s", $date);
+    $stmt->bind_param("ss", $startDate, $endDate);
     $stmt->execute();
     $hourlyBookingsResult = $stmt->get_result();
     while($row = $hourlyBookingsResult->fetch_assoc()){
@@ -5118,7 +5260,8 @@ function getDailyIncomeAnalysis(){
     $totalProfit = $orderProfit + $totalBookingRevenue; // Bookings are pure profit
     
     respond('success', [
-        'date' => $date,
+        'start_date' => $startDate,
+        'end_date' => $endDate,
         'summary' => [
             'total_revenue' => round($totalRevenue, 2),
             'order_revenue' => round($totalOrderRevenue, 2),
@@ -5250,6 +5393,16 @@ function getPrintableDailyReport(){
 }
 
 /**
+ * Helper function to format hour in 12-hour format
+ */
+function format12Hour($hour){
+    $period = $hour >= 12 ? 'PM' : 'AM';
+    $hour12 = $hour % 12;
+    if($hour12 === 0) $hour12 = 12;
+    return $hour12 . ' ' . $period;
+}
+
+/**
  * Helper function to find peak hour from hourly data
  */
 function findPeakHour($hourlyData){
@@ -5265,7 +5418,7 @@ function findPeakHour($hourlyData){
     
     return [
         'hour' => $peakHour,
-        'hour_label' => sprintf('%02d:00 - %02d:00', $peakHour, ($peakHour + 1) % 24),
+        'hour_label' => format12Hour($peakHour) . ' - ' . format12Hour(($peakHour + 1) % 24),
         'revenue' => round($maxRevenue, 2)
     ];
 }

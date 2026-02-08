@@ -36,6 +36,9 @@ import { getLocalizedUrl } from '@/utils/i18n'
 // Service Imports
 import { getStoredAdmin } from '@/services/api'
 
+// Context Imports
+import { useAuth } from '@/contexts/authContext'
+
 // Styled component for badge content
 const BadgeContentSpan = styled('span')({
   width: 8,
@@ -87,24 +90,15 @@ const UserDropdown = () => {
     setOpen(false)
   }
 
+  // Get logout from auth context
+  const { logout } = useAuth()
+
   const handleUserLogout = async () => {
     try {
-      // Clear local storage first
-      localStorage.removeItem('x-station-token')
-      localStorage.removeItem('x-station-admin')
-      
-      // Clear all local storage items related to the session
-      localStorage.clear()
-      
-      // Sign out from NextAuth session and redirect
-      await signOut({ 
-        callbackUrl: getLocalizedUrl('/login', locale as Locale),
-        redirect: true 
-      })
+      // Use auth context logout which calls backend endpoint to end shift
+      await logout()
     } catch (error) {
-      console.error(error)
-      // Force redirect to login even if signOut fails
-      router.push(getLocalizedUrl('/login', locale as Locale))
+      console.error('Logout error:', error)
     }
   }
 

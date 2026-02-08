@@ -42,8 +42,8 @@ import { useSettings } from '@core/hooks/useSettings'
 // Util Imports
 import { getLocalizedUrl } from '@/utils/i18n'
 
-// Service Imports
-import { authApi } from '@/services/api'
+// Hook Imports  
+import { useAuth } from '@/contexts/authContext'
 
 type Props = {
   mode: SystemMode
@@ -106,6 +106,7 @@ const Login = ({ mode, dictionary }: Props) => {
   const searchParams = useSearchParams()
   const { lang: locale } = useParams()
   const { settings } = useSettings()
+  const { login } = useAuth()
   const theme = useTheme()
   const hidden = useMediaQuery(theme.breakpoints.down('md'))
   const authBackground = useImageVariant(mode, lightImg, darkImg)
@@ -137,18 +138,14 @@ const Login = ({ mode, dictionary }: Props) => {
       setIsLoading(true)
       setErrorMessage(null)
 
-      const response = await authApi.login(data.email, data.password)
+      const result = await login(data.email, data.password)
 
-      if (response.status === 'success' && response.data) {
-        // Store auth data
-        localStorage.setItem('x-station-token', response.data.token)
-        localStorage.setItem('x-station-admin', JSON.stringify(response.data.admin))
-
-        // Redirect
+      if (result.success) {
+        // Redirect to intended page or dashboard
         const redirectURL = searchParams.get('redirectTo') ?? '/dashboard'
         router.replace(getLocalizedUrl(redirectURL, locale as Locale))
       } else {
-        setErrorMessage(response.message || 'Invalid credentials')
+        setErrorMessage(result.message || 'Invalid credentials')
       }
     } catch (error) {
       setErrorMessage('Network error. Please try again.')

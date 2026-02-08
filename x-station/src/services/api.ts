@@ -5,15 +5,25 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://x-station-api.l
 // Get token from localStorage (client-side only)
 const getToken = (): string | null => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('x-station-token')
+    const token = localStorage.getItem('x-station-token')
+    return token && token !== 'undefined' && token !== 'null' ? token : null
   }
   return null
 }
 
+// Export getToken for use in other files
+export { getToken }
+
 // Set token in localStorage
 export const setToken = (token: string): void => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('x-station-token', token)
+    if (token && token !== 'undefined' && token !== 'null') {
+      localStorage.setItem('x-station-token', token)
+      console.log('Token saved to localStorage')
+    } else {
+      console.error('Invalid token provided to setToken:', token)
+      removeToken()
+    }
   }
 }
 
@@ -22,14 +32,23 @@ export const removeToken = (): void => {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('x-station-token')
     localStorage.removeItem('x-station-admin')
+    console.log('Token and admin data removed from localStorage')
   }
 }
 
 // Get stored admin info
 export const getStoredAdmin = () => {
   if (typeof window !== 'undefined') {
-    const admin = localStorage.getItem('x-station-admin')
-    return admin ? JSON.parse(admin) : null
+    try {
+      const admin = localStorage.getItem('x-station-admin')
+      if (!admin || admin === 'undefined' || admin === 'null') {
+        return null
+      }
+      return JSON.parse(admin)
+    } catch (error) {
+      console.error('Error parsing stored admin data:', error)
+      return null
+    }
   }
   return null
 }
@@ -37,7 +56,12 @@ export const getStoredAdmin = () => {
 // Set admin info
 export const setStoredAdmin = (admin: any): void => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('x-station-admin', JSON.stringify(admin))
+    if (admin && typeof admin === 'object') {
+      localStorage.setItem('x-station-admin', JSON.stringify(admin))
+      console.log('Admin data saved to localStorage')
+    } else {
+      console.error('Invalid admin data provided to setStoredAdmin:', admin)
+    }
   }
 }
 
@@ -63,9 +87,15 @@ async function apiCall<T = any>(
   
   if (requiresAuth) {
     const token = getToken()
-    if (token) {
-      headers['X-Authorization'] = `Bearer ${token}`
+    if (!token) {
+      // If token is required but not available, return error
+      console.warn(`[API] ${action} requires authentication but no token found`)
+      return {
+        status: 'error',
+        message: 'Authentication required. Please log in again.'
+      }
     }
+    headers['X-Authorization'] = `Bearer ${token}`
   }
   
   let requestBody: BodyInit | undefined
@@ -80,7 +110,7 @@ async function apiCall<T = any>(
       }
     })
     requestBody = formData
-  } else if (body) {
+  } else if (body && Object.keys(body).length >= 0) {
     headers['Content-Type'] = 'application/json'
     requestBody = JSON.stringify(body)
   }
@@ -95,7 +125,7 @@ async function apiCall<T = any>(
     const data = await response.json()
     return data
   } catch (error) {
-    console.error('API call failed:', error)
+    console.error(`[API] ${action} failed:`, error)
     return {
       status: 'error',
       message: 'Network error occurred. Please try again.'
@@ -344,6 +374,41 @@ export const analyticsApi = {
     apiCall('getFullRevenueAnalytics', { start_date: startDate, end_date: endDate, export: exportData })
 }
 
+// ==================== SHIFT MANAGEMENT ====================
+
+export const shiftApi = {
+  // Start a new shift
+  start: (data?: { started_at?: string; opening_cash?: number; notes?: string }) =>
+    apiCall('startShift', data || {}),
+  
+  // End the current active shift
+  end: (data?: { ended_at?: string; closing_cash?: number; notes?: string }) =>
+    apiCall('endShift', data || {}),
+  
+  // Get current active shift status
+  getCurrent: () => apiCall('getCurrentShift', {}),
+  
+  // List all shifts with optional date filtering
+  list: (startDate?: string, endDate?: string) =>
+    apiCall('listShifts', { start_date: startDate, end_date: endDate }),
+  
+  // Get detailed report for a specific shift
+  getReport: (shiftId: number) =>
+    apiCall('getShiftReport', { shift_id: shiftId }),
+  
+  // Get daily income analysis (superadmin only) - supports date range
+  getDailyIncomeAnalysis: (startDate?: string, endDate?: string) =>
+    apiCall('getDailyIncomeAnalysis', startDate ? { start_date: startDate, end_date: endDate || startDate } : {}),
+  
+  // Get printable daily report (superadmin only)
+  getPrintableDailyReport: (date?: string) =>
+    apiCall('getPrintableDailyReport', date ? { date } : {}),
+  
+  // Get monthly shift summary (superadmin only)
+  getMonthlyShiftSummary: (month?: string) =>
+    apiCall('getMonthlyShiftSummary', month ? { month } : {})
+}
+
 export default {
   auth: authApi,
   admin: adminApi,
@@ -353,5 +418,6 @@ export default {
   cafeteria: cafeteriaApi,
   order: orderApi,
   frontDesk: frontDeskApi,
-  analytics: analyticsApi
+  analytics: analyticsApi,
+  shift: shiftApi
 }
