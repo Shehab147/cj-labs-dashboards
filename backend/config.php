@@ -121,9 +121,10 @@ function requireParams($params){
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Feb 08, 2026 at 01:48 PM
+-- Generation Time: Feb 10, 2026 at 10:16 PM
 -- Server version: 8.0.45-0ubuntu0.22.04.1
 -- PHP Version: 7.4.33
+
 --
 -- Database: `x-station`
 --
@@ -215,7 +216,8 @@ CREATE TABLE `rooms` (
   `hour_cost` decimal(10,2) NOT NULL DEFAULT '0.00',
   `capacity` int NOT NULL DEFAULT '1',
   `is_booked` tinyint(1) NOT NULL DEFAULT '0',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `multi_hour_cost` double NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -231,7 +233,9 @@ CREATE TABLE `room_booking` (
   `started_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `finished_at` timestamp NULL DEFAULT NULL COMMENT 'NULL for active/open sessions',
   `price` decimal(10,2) NOT NULL DEFAULT '0.00',
-  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_multi` int NOT NULL,
+  `discount` double NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------

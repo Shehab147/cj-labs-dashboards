@@ -707,13 +707,14 @@ function addRoom(){
     if($admin['role'] != 'superadmin' ){
         respond('error', 'Unauthorized. Only superadmin and manager can add rooms.');
     }
-    $input = requireParams(['name', 'ps', 'hour_cost', 'capacity']);
+    $input = requireParams(['name', 'ps', 'hour_cost', 'capacity', 'multi_hour_cost']);
     $name = $input['name'];
     $ps = $input['ps'];
     $hour_cost = (float)$input['hour_cost'];
     $capacity = (int)$input['capacity'];
-    $stmt = $conn->prepare("INSERT INTO rooms (name, ps, hour_cost, capacity, is_booked) VALUES (?, ?, ?, ?, 0)");
-    $stmt->bind_param("ssdi", $name, $ps, $hour_cost, $capacity);
+    $multi_hour_cost = (float)$input['multi_hour_cost'];
+    $stmt = $conn->prepare("INSERT INTO rooms (name, ps, hour_cost, capacity, is_booked, multi_hour_cost) VALUES (?, ?, ?, ?, 0, ?)");
+    $stmt->bind_param("ssdid", $name, $ps, $hour_cost, $capacity, $multi_hour_cost);
     $stmt->execute();
     $roomId = $conn->insert_id;
     $stmt->close();
@@ -725,14 +726,15 @@ function updateRoom(){
     if($admin['role'] != 'superadmin' ){
         respond('error', 'Unauthorized. Only superadmin and manager can update rooms.');
     }
-    $input = requireParams(['id', 'name', 'ps', 'hour_cost', 'capacity']);
+    $input = requireParams(['id', 'name', 'ps', 'hour_cost', 'capacity', 'multi_hour_cost']);
     $id = (int)$input['id'];
     $name = $input['name'];
     $ps = $input['ps'];
     $hour_cost = (float)$input['hour_cost'];
     $capacity = (int)$input['capacity'];
-    $stmt = $conn->prepare("UPDATE rooms SET name = ?, ps = ?, hour_cost = ?, capacity = ? WHERE id = ?");
-    $stmt->bind_param("ssdii", $name, $ps, $hour_cost, $capacity, $id);
+    $multi_hour_cost = (float)$input['multi_hour_cost'];
+    $stmt = $conn->prepare("UPDATE rooms SET name = ?, ps = ?, hour_cost = ?, capacity = ?, multi_hour_cost = ? WHERE id = ?");
+    $stmt->bind_param("ssdidi", $name, $ps, $hour_cost, $capacity, $multi_hour_cost, $id);
     $stmt->execute();
     $stmt->close();
     respond('success', 'Room updated successfully.');
@@ -840,6 +842,9 @@ function getRoom(){
 
     respond('success', $room);
 }
+
+
+
 function add_cafeteria_item(){
     global $conn;
     $admin = getAdmin();
@@ -1128,8 +1133,14 @@ function addBooking(){
     $scheduled_start = isset($input['started_at']) ? $input['started_at'] : null;
     $scheduled_finish = isset($input['finished_at']) ? $input['finished_at'] : null;
     
-    // Get room hourly cost
-    $stmt = $conn->prepare("SELECT hour_cost, is_booked FROM rooms WHERE id = ?");
+    // Check if this is a multi-player booking
+    $is_multi = isset($input['is_multi']) ? (int)$input['is_multi'] : 0;
+    
+    // Optional discount (percentage or fixed amount)
+    $discount = isset($input['discount']) ? (float)$input['discount'] : 0;
+    
+    // Get room hourly costs
+    $stmt = $conn->prepare("SELECT hour_cost, multi_hour_cost, is_booked FROM rooms WHERE id = ?");
     $stmt->bind_param("i", $room_id);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -1140,7 +1151,8 @@ function addBooking(){
         respond('error', 'Room not found.');
     }
     
-    $hour_cost = (float)$room['hour_cost'];
+    // Use multi_hour_cost if is_multi is true, otherwise use hour_cost
+    $hour_cost = $is_multi ? (float)$room['multi_hour_cost'] : (float)$room['hour_cost'];
     $current_time = date('Y-m-d H:i:s');
     
     // Check for conflicting bookings
@@ -1203,7 +1215,11 @@ function addBooking(){
         // Calculate price based on actual minutes (proportional to hourly rate)
         // Price = (hourly_rate / 60) * minutes
         $price_per_minute = $hour_cost / 60;
-        $price = round($price_per_minute * $total_minutes, 2);
+        $price_before_discount = round($price_per_minute * $total_minutes, 2);
+        
+        // Apply discount
+        $price = round($price_before_discount - $discount, 2);
+        if($price < 0) $price = 0;
         
         // Convert to hours for display
         $hours = $total_minutes / 60;
@@ -1221,8 +1237,8 @@ function addBooking(){
         }
         
         // Insert scheduled booking with calculated price
-        $stmt = $conn->prepare("INSERT INTO room_booking (customer_id, room_id, started_at, finished_at, price) VALUES (?, ?, ?, ?, ?)");
-        $stmt->bind_param("iissd", $customer_id, $room_id, $started_at, $finished_at, $price);
+        $stmt = $conn->prepare("INSERT INTO room_booking (customer_id, room_id, started_at, finished_at, price, is_multi, discount) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("iissdid", $customer_id, $room_id, $started_at, $finished_at, $price, $is_multi, $discount);
         $stmt->execute();
         $bookingId = $conn->insert_id;
         $stmt->close();
@@ -1234,8 +1250,11 @@ function addBooking(){
             'finished_at' => $finished_at,
             'duration_hours' => round($hours, 2),
             'hour_cost' => $hour_cost,
+            'price_before_discount' => $price_before_discount,
+            'discount' => $discount,
             'total_price' => $price,
             'booking_type' => 'scheduled',
+            'is_multi' => $is_multi,
             'status' => $shouldMarkBooked ? 'active' : 'pending'
         ]);
         
@@ -1250,8 +1269,8 @@ function addBooking(){
         $stmt->close();
         
         // Insert booking with null finished_at and price (open session)
-        $stmt = $conn->prepare("INSERT INTO room_booking (customer_id, room_id, started_at, finished_at, price) VALUES (?, ?, ?, NULL, 0)");
-        $stmt->bind_param("iis", $customer_id, $room_id, $started_at);
+        $stmt = $conn->prepare("INSERT INTO room_booking (customer_id, room_id, started_at, finished_at, price, is_multi, discount) VALUES (?, ?, ?, NULL, 0, ?, ?)");
+        $stmt->bind_param("iisid", $customer_id, $room_id, $started_at, $is_multi, $discount);
         $stmt->execute();
         $bookingId = $conn->insert_id;
         $stmt->close();
@@ -1262,6 +1281,8 @@ function addBooking(){
             'started_at' => $started_at,
             'hour_cost' => $hour_cost,
             'booking_type' => 'open_session',
+            'is_multi' => $is_multi,
+            'discount' => $discount,
             'status' => 'active'
         ]);
     }
@@ -1273,8 +1294,8 @@ function endBooking(){
     $input = requireParams(['booking_id']);
     $booking_id = $input['booking_id'];
     
-    // Get booking details
-    $stmt = $conn->prepare("SELECT rb.*, r.hour_cost FROM room_booking rb JOIN rooms r ON rb.room_id = r.id WHERE rb.id = ?");
+    // Get booking details with both hour costs
+    $stmt = $conn->prepare("SELECT rb.*, r.hour_cost, r.multi_hour_cost FROM room_booking rb JOIN rooms r ON rb.room_id = r.id WHERE rb.id = ?");
     $stmt->bind_param("i", $booking_id);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -1287,7 +1308,10 @@ function endBooking(){
     
     $current_time = date('Y-m-d H:i:s');
     $started_at = $booking['started_at'];
-    $hour_cost = (float)$booking['hour_cost'];
+    $is_multi = isset($booking['is_multi']) ? (int)$booking['is_multi'] : 0;
+    $discount = isset($booking['discount']) ? (float)$booking['discount'] : 0;
+    // Use appropriate hourly cost based on is_multi
+    $hour_cost = $is_multi ? (float)$booking['multi_hour_cost'] : (float)$booking['hour_cost'];
     
     // Check if this is a scheduled booking (has both start and finish times)
     $is_scheduled = ($booking['finished_at'] !== null && $booking['price'] > 0);
@@ -1317,7 +1341,11 @@ function endBooking(){
         
         // Recalculate price based on actual usage (proportional)
         $price_per_minute = $hour_cost / 60;
-        $price = round($price_per_minute * $total_minutes, 2);
+        $price_before_discount = round($price_per_minute * $total_minutes, 2);
+        
+        // Apply discount
+        $price = round($price_before_discount - $discount, 2);
+        if($price < 0) $price = 0;
         
         // Convert to hours for display
         $hours = $total_minutes / 60;
@@ -1342,6 +1370,9 @@ function endBooking(){
             'actual_finished_at' => $finished_at,
             'duration_hours' => round($hours, 2),
             'hour_cost' => $hour_cost,
+            'is_multi' => $is_multi,
+            'price_before_discount' => $price_before_discount,
+            'discount' => $discount,
             'total_price' => $price,
             'original_price' => (float)$booking['price'],
             'savings' => round((float)$booking['price'] - $price, 2)
@@ -1369,7 +1400,11 @@ function endBooking(){
         
         // Calculate price based on actual minutes used
         $price_per_minute = $hour_cost / 60;
-        $price = round($price_per_minute * $total_minutes, 2);
+        $price_before_discount = round($price_per_minute * $total_minutes, 2);
+        
+        // Apply discount
+        $price = round($price_before_discount - $discount, 2);
+        if($price < 0) $price = 0;
         
         // Convert to hours for display
         $hours = $total_minutes / 60;
@@ -1393,8 +1428,139 @@ function endBooking(){
             'finished_at' => $finished_at,
             'duration_hours' => round($hours, 2),
             'hour_cost' => $hour_cost,
+            'is_multi' => $is_multi,
+            'price_before_discount' => $price_before_discount,
+            'discount' => $discount,
             'total_price' => $price,
             'booking_type' => 'open_session'
+        ]);
+    }
+}
+
+/**
+ * Update discount for an active/pending booking (before it ends)
+ * Can be used to set or modify discount during an open session or scheduled booking
+ */
+function updateBookingDiscount(){
+    global $conn;
+    $admin = getAdmin();
+    $input = requireParams(['booking_id', 'discount']);
+    $booking_id = (int)$input['booking_id'];
+    $new_discount = (float)$input['discount'];
+    
+    if($new_discount < 0){
+        respond('error', 'Discount cannot be negative.');
+    }
+    
+    // Get booking details with both hour costs
+    $stmt = $conn->prepare("SELECT rb.*, r.hour_cost, r.multi_hour_cost, r.name as room_name FROM room_booking rb JOIN rooms r ON rb.room_id = r.id WHERE rb.id = ?");
+    $stmt->bind_param("i", $booking_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $booking = $result->fetch_assoc();
+    $stmt->close();
+    
+    if(!$booking){
+        respond('error', 'Booking not found.');
+    }
+    
+    $current_time = date('Y-m-d H:i:s');
+    $started_at = $booking['started_at'];
+    $is_multi = isset($booking['is_multi']) ? (int)$booking['is_multi'] : 0;
+    $old_discount = isset($booking['discount']) ? (float)$booking['discount'] : 0;
+    
+    // Use appropriate hourly cost based on is_multi
+    $hour_cost = $is_multi ? (float)$booking['multi_hour_cost'] : (float)$booking['hour_cost'];
+    
+    // Check if this is a scheduled booking (has both start and finish times with price > 0)
+    $is_scheduled = ($booking['finished_at'] !== null && (float)$booking['price'] > 0);
+    $is_completed = false;
+    
+    if($is_scheduled){
+        // Check if scheduled booking has already ended
+        if($current_time >= $booking['finished_at']){
+            $is_completed = true;
+        }
+    } else {
+        // For open sessions, check if already ended (finished_at is set)
+        if($booking['finished_at'] !== null){
+            $is_completed = true;
+        }
+    }
+    
+    if($is_completed){
+        respond('error', 'Cannot update discount for a completed booking.');
+    }
+    
+    // Calculate current/estimated price with the new discount
+    $now = new DateTime();
+    $start = new DateTime($started_at);
+    
+    if($is_scheduled){
+        // Scheduled booking - calculate based on scheduled duration
+        $end = new DateTime($booking['finished_at']);
+        $diff = $start->diff($end);
+        $total_minutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
+        $hours = $total_minutes / 60;
+        
+        $price_per_minute = $hour_cost / 60;
+        $price_before_discount = round($price_per_minute * $total_minutes, 2);
+        $new_price = round($price_before_discount - $new_discount, 2);
+        if($new_price < 0) $new_price = 0;
+        
+        // Update both discount and price for scheduled booking
+        $stmt = $conn->prepare("UPDATE room_booking SET discount = ?, price = ? WHERE id = ?");
+        $stmt->bind_param("ddi", $new_discount, $new_price, $booking_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        respond('success', [
+            'message' => 'Booking discount updated successfully.',
+            'booking_id' => $booking_id,
+            'room_name' => $booking['room_name'],
+            'booking_type' => 'scheduled',
+            'started_at' => $started_at,
+            'finished_at' => $booking['finished_at'],
+            'duration_hours' => round($hours, 2),
+            'hour_cost' => $hour_cost,
+            'is_multi' => $is_multi,
+            'price_before_discount' => $price_before_discount,
+            'old_discount' => $old_discount,
+            'new_discount' => $new_discount,
+            'total_price' => $new_price
+        ]);
+        
+    } else {
+        // Open session - calculate based on current elapsed time
+        $diff = $start->diff($now);
+        $total_minutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
+        $hours = $total_minutes / 60;
+        
+        $price_per_minute = $hour_cost / 60;
+        $price_before_discount = round($price_per_minute * $total_minutes, 2);
+        $estimated_price = round($price_before_discount - $new_discount, 2);
+        if($estimated_price < 0) $estimated_price = 0;
+        
+        // Update only discount for open session (price calculated at endBooking)
+        $stmt = $conn->prepare("UPDATE room_booking SET discount = ? WHERE id = ?");
+        $stmt->bind_param("di", $new_discount, $booking_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        respond('success', [
+            'message' => 'Booking discount updated successfully.',
+            'booking_id' => $booking_id,
+            'room_name' => $booking['room_name'],
+            'booking_type' => 'open_session',
+            'started_at' => $started_at,
+            'current_duration_hours' => round($hours, 2),
+            'hour_cost' => $hour_cost,
+            'is_multi' => $is_multi,
+            'current_price_before_discount' => $price_before_discount,
+            'old_discount' => $old_discount,
+            'new_discount' => $new_discount,
+            'estimated_total_price' => $estimated_price,
+            'note' => 'Final price will be calculated when booking ends'
         ]);
     }
 }
@@ -1404,7 +1570,7 @@ function listBookings(){
     getAdmin();
     
     $result = $conn->query("
-        SELECT rb.*, r.name as room_name, r.hour_cost, c.name as customer_name, c.phone as customer_phone 
+        SELECT rb.*, r.name as room_name, r.hour_cost, r.multi_hour_cost, c.name as customer_name, c.phone as customer_phone 
         FROM room_booking rb 
         JOIN rooms r ON rb.room_id = r.id 
         LEFT JOIN customers c ON rb.customer_id = c.id 
@@ -1417,6 +1583,9 @@ function listBookings(){
     while($row = $result->fetch_assoc()){
         $start = new DateTime($row['started_at']);
         $is_open_session = ($row['finished_at'] === null || ($row['finished_at'] === null && $row['price'] == 0));
+        $is_multi = isset($row['is_multi']) ? (int)$row['is_multi'] : 0;
+        // Use appropriate hourly cost based on is_multi
+        $applicable_hour_cost = $is_multi ? (float)$row['multi_hour_cost'] : (float)$row['hour_cost'];
         
         // Determine booking status
         if($row['finished_at'] !== null && $row['price'] > 0){
@@ -1442,9 +1611,9 @@ function listBookings(){
                 $diff = $start->diff($now);
                 $hours = $diff->h + ($diff->days * 24) + ($diff->i / 60);
                 $row['current_duration_hours'] = round($hours, 2);
-                // Calculate estimated price based on current minutes
+                // Calculate estimated price based on current minutes and applicable cost
                 $total_minutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
-                $price_per_minute = (float)$row['hour_cost'] / 60;
+                $price_per_minute = $applicable_hour_cost / 60;
                 $row['estimated_price'] = round($price_per_minute * $total_minutes, 2);
             } else {
                 $row['status'] = 'pending';
@@ -1474,7 +1643,7 @@ function getActiveBookings(){
     $current_time = date('Y-m-d H:i:s');
     
     $result = $conn->query("
-        SELECT rb.*, r.name as room_name, r.hour_cost, c.name as customer_name, c.phone as customer_phone 
+        SELECT rb.*, r.name as room_name, r.hour_cost, r.multi_hour_cost, c.name as customer_name, c.phone as customer_phone 
         FROM room_booking rb 
         JOIN rooms r ON rb.room_id = r.id 
         LEFT JOIN customers c ON rb.customer_id = c.id 
@@ -1489,6 +1658,9 @@ function getActiveBookings(){
     
     while($row = $result->fetch_assoc()){
         $start = new DateTime($row['started_at']);
+        $is_multi = isset($row['is_multi']) ? (int)$row['is_multi'] : 0;
+        // Use appropriate hourly cost based on is_multi
+        $applicable_hour_cost = $is_multi ? (float)$row['multi_hour_cost'] : (float)$row['hour_cost'];
         
         // Get related orders for this booking
         $ordersStmt = $conn->prepare("
@@ -1540,9 +1712,9 @@ function getActiveBookings(){
             $diff = $start->diff($now);
             $hours = $diff->h + ($diff->days * 24) + ($diff->i / 60);
             $row['current_duration_hours'] = round($hours, 2);
-            // Calculate based on actual minutes
+            // Calculate based on actual minutes and applicable cost
             $total_minutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
-            $price_per_minute = (float)$row['hour_cost'] / 60;
+            $price_per_minute = $applicable_hour_cost / 60;
             $row['billable_minutes'] = $total_minutes;
             $row['estimated_price'] = round($price_per_minute * $total_minutes, 2);
             $row['booking_type'] = 'open_session';
@@ -1558,9 +1730,9 @@ function getActiveBookings(){
             $remaining_hours = $diff_to_end->h + ($diff_to_end->days * 24) + ($diff_to_end->i / 60);
             $total_hours = $total_duration->h + ($total_duration->days * 24) + ($total_duration->i / 60);
             
-            // Calculate based on total minutes
+            // Calculate based on total minutes and applicable cost
             $total_minutes_duration = ($total_duration->days * 24 * 60) + $total_duration->h * 60 + $total_duration->i;
-            $price_per_minute = (float)$row['hour_cost'] / 60;
+            $price_per_minute = $applicable_hour_cost / 60;
             
             $row['current_duration_hours'] = round($elapsed_hours, 2);
             $row['remaining_hours'] = round($remaining_hours, 2);
@@ -1587,7 +1759,7 @@ function getBookingEndingAlerts(){
     
     // Get bookings that will finish within the next 5 minutes
     $result = $conn->query("
-        SELECT rb.*, r.name as room_name, r.hour_cost, c.name as customer_name, c.phone as customer_phone 
+        SELECT rb.*, r.name as room_name, r.hour_cost, r.multi_hour_cost, c.name as customer_name, c.phone as customer_phone 
         FROM room_booking rb 
         JOIN rooms r ON rb.room_id = r.id 
         LEFT JOIN customers c ON rb.customer_id = c.id 
@@ -1639,7 +1811,7 @@ function getBookings(){
     
     // Get ALL bookings from all time with full data
     $result = $conn->query("
-        SELECT rb.*, r.name as room_name, r.ps, r.hour_cost, c.name as customer_name, c.phone as customer_phone
+        SELECT rb.*, r.name as room_name, r.ps, r.hour_cost, r.multi_hour_cost, c.name as customer_name, c.phone as customer_phone
         FROM room_booking rb
         JOIN rooms r ON rb.room_id = r.id
         LEFT JOIN customers c ON rb.customer_id = c.id
@@ -2115,6 +2287,85 @@ function deleteOrder(){
     $stmt->close();
     
     respond('success', 'Order deleted successfully and stock restored.');
+}
+
+function deleteOrderItems(){
+    global $conn;
+    $admin = getAdmin();
+    
+    $input = requireParams(['order_item_id']);
+    $order_item_id = (int)$input['order_item_id'];
+    
+    // Get order item details
+    $stmt = $conn->prepare("SELECT oi.*, o.discount as order_discount FROM order_items oi JOIN orders o ON oi.order_id = o.id WHERE oi.id = ?");
+    $stmt->bind_param("i", $order_item_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $orderItem = $result->fetch_assoc();
+    $stmt->close();
+    
+    if(!$orderItem){
+        respond('error', 'Order item not found.');
+    }
+    
+    $order_id = $orderItem['order_id'];
+    $item_id = $orderItem['item_id'];
+    $quantity = $orderItem['quantity'];
+    $item_total_price = (float)$orderItem['total_price'];
+    $order_discount = (float)$orderItem['order_discount'];
+    
+    // Restore stock
+    $stmt = $conn->prepare("UPDATE cafeteria_items SET stock = stock + ? WHERE id = ?");
+    $stmt->bind_param("ii", $quantity, $item_id);
+    $stmt->execute();
+    $stmt->close();
+    
+    // Delete the order item
+    $stmt = $conn->prepare("DELETE FROM order_items WHERE id = ?");
+    $stmt->bind_param("i", $order_item_id);
+    $stmt->execute();
+    $stmt->close();
+    
+    // Check if there are remaining items in the order
+    $stmt = $conn->prepare("SELECT COUNT(*) as remaining_count, COALESCE(SUM(total_price), 0) as new_subtotal FROM order_items WHERE order_id = ?");
+    $stmt->bind_param("i", $order_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $remaining = $result->fetch_assoc();
+    $stmt->close();
+    
+    if((int)$remaining['remaining_count'] == 0){
+        // No items left, delete the order
+        $stmt = $conn->prepare("DELETE FROM orders WHERE id = ?");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        respond('success', [
+            'message' => 'Order item deleted and stock restored. Order was also deleted as it had no remaining items.',
+            'order_deleted' => true,
+            'stock_restored' => $quantity
+        ]);
+    } else {
+        // Recalculate order total
+        $new_subtotal = (float)$remaining['new_subtotal'];
+        $new_price = $new_subtotal - $order_discount;
+        if($new_price < 0) $new_price = 0;
+        
+        $stmt = $conn->prepare("UPDATE orders SET price = ? WHERE id = ?");
+        $stmt->bind_param("di", $new_price, $order_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        respond('success', [
+            'message' => 'Order item deleted and stock restored.',
+            'order_deleted' => false,
+            'stock_restored' => $quantity,
+            'new_order_subtotal' => $new_subtotal,
+            'new_order_total' => $new_price,
+            'remaining_items' => (int)$remaining['remaining_count']
+        ]);
+    }
 }
 
 function listOrders(){
@@ -2671,31 +2922,56 @@ function getFullRoomAnalytics(){
         $dayOfWeekAnalysis[] = $row;
     }
     
+    // All bookings data for calendar view
+    $allBookingsQuery = "
+        SELECT 
+            rb.id as booking_id,
+            rb.room_id,
+            rb.customer_id,
+            rb.createdAt as created_at,
+            rb.started_at,
+            rb.finished_at,
+            rb.price,
+            rb.is_multi,
+            rb.discount,
+            r.name as room_name,
+            r.ps as room_ps,
+            r.hour_cost,
+            r.multi_hour_cost,
+            r.capacity as room_capacity,
+            c.name as customer_name,
+            c.phone as customer_phone,
+            TIMESTAMPDIFF(MINUTE, rb.started_at, rb.finished_at) as duration_minutes,
+            DATE(rb.started_at) as booking_date,
+            TIME(rb.started_at) as start_time,
+            TIME(rb.finished_at) as end_time,
+            CASE 
+                WHEN rb.finished_at IS NULL THEN 'active'
+                WHEN rb.finished_at IS NOT NULL AND rb.price > 0 THEN 'completed'
+                ELSE 'pending'
+            END as status
+        FROM room_booking rb
+        JOIN rooms r ON rb.room_id = r.id
+        LEFT JOIN customers c ON rb.customer_id = c.id
+        " . ($dateFilter ? $dateFilter : "") . "
+        ORDER BY rb.started_at ASC
+    ";
+    $allBookingsResult = $conn->query($allBookingsQuery);
+    $allBookings = [];
+    while($row = $allBookingsResult->fetch_assoc()){
+        $row['duration_hours'] = $row['duration_minutes'] ? round((float)$row['duration_minutes'] / 60, 2) : null;
+        $row['is_multi'] = (int)$row['is_multi'];
+        $row['price'] = (float)$row['price'];
+        $row['discount'] = (float)$row['discount'];
+        $row['hour_cost'] = (float)$row['hour_cost'];
+        $row['multi_hour_cost'] = (float)$row['multi_hour_cost'];
+        $allBookings[] = $row;
+    }
+    
     // Bookings for export
     $bookingsForExport = [];
     if($export){
-        $bookingsQuery = "
-            SELECT 
-                rb.id as booking_id,
-                rb.createdAt as created_at,
-                r.name as room_name,
-                c.name as customer_name,
-                c.phone as customer_phone,
-                rb.started_at,
-                rb.finished_at,
-                rb.price,
-                TIMESTAMPDIFF(MINUTE, rb.started_at, rb.finished_at) as duration_minutes
-            FROM room_booking rb
-            JOIN rooms r ON rb.room_id = r.id
-            LEFT JOIN customers c ON rb.customer_id = c.id
-            " . ($dateFilter ? $dateFilter : "") . "
-            ORDER BY rb.createdAt DESC
-        ";
-        $bookingsResult = $conn->query($bookingsQuery);
-        while($row = $bookingsResult->fetch_assoc()){
-            $row['duration_hours'] = $row['duration_minutes'] ? round((float)$row['duration_minutes'] / 60, 2) : null;
-            $bookingsForExport[] = $row;
-        }
+        $bookingsForExport = $allBookings;
     }
     
     $data = [
@@ -2714,7 +2990,8 @@ function getFullRoomAnalytics(){
         'daily_breakdown' => $dailyBreakdown,
         'hourly_distribution' => $hourlyDistribution,
         'day_of_week_analysis' => $dayOfWeekAnalysis,
-        'top_customers' => $topCustomers
+        'top_customers' => $topCustomers,
+        'all_bookings' => $allBookings
     ];
     
     if($export){
@@ -4525,7 +4802,41 @@ function quickOrder(){
         'items' => $validatedItems
     ]);
 }
-
+function deleteBooking(){
+    global $conn;
+    getAdmin();
+    
+    $input = requireParams(['booking_id']);
+    $booking_id = (int)$input['booking_id'];
+    
+    // Get booking
+    $stmt = $conn->prepare("SELECT * FROM room_booking WHERE id = ?");
+    $stmt->bind_param("i", $booking_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $booking = $result->fetch_assoc();
+    $stmt->close();
+    
+    if(!$booking){
+        respond('error', 'Booking not found.');
+    }
+    
+    // Delete booking
+    $stmt = $conn->prepare("DELETE FROM room_booking WHERE id = ?");
+    $stmt->bind_param("i", $booking_id);
+    $stmt->execute();
+    $stmt->close();
+    
+    // Free room if it was booked
+    if($booking['room_id']){
+        $stmt = $conn->prepare("UPDATE rooms SET is_booked = 0 WHERE id = ?");
+        $stmt->bind_param("i", $booking['room_id']);
+        $stmt->execute();
+        $stmt->close();
+    }
+    
+    respond('success', 'Booking deleted successfully.');
+}
 /**
  * Get items with stock for ordering (excludes out of stock)
  */
