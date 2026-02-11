@@ -241,6 +241,8 @@ export const bookingApi = {
   
   cancel: (id: number) => apiCall('cancelBooking', { id }),
   
+  delete: (bookingId: number) => apiCall('deleteBooking', { booking_id: bookingId }),
+  
   quickStart: (data: { 
     room_id: number; 
     customer_phone: string; 
@@ -258,6 +260,9 @@ export const bookingApi = {
   
   timerUpdate: (bookingId: number, newFinishedAt: string) =>
     apiCall('timerUpdate', { booking_id: bookingId, new_finished_at: newFinishedAt }),
+  
+  updateDiscount: (bookingId: number, discount: number) =>
+    apiCall('updateBookingDiscount', { booking_id: bookingId, discount }),
   
   getUpcoming: (days?: number) => apiCall('getUpcomingBookings', days ? { days } : undefined),
   
@@ -330,7 +335,15 @@ export const orderApi = {
   
   delete: (id: number) => apiCall('deleteOrder', { id }),
   
-  getTodays: () => apiCall('getTodaysOrders')
+  getTodays: () => apiCall('getTodaysOrders'),
+  
+  // Update order item quantity (superadmin only)
+  updateItem: (order_item_id: number, quantity: number) =>
+    apiCall('updateOrderItem', { order_item_id, quantity }),
+  
+  // Delete order item (superadmin only)
+  deleteItem: (order_item_id: number) =>
+    apiCall('deleteOrderItems', { order_item_id })
 }
 
 // ==================== FRONT DESK OPERATIONS ====================

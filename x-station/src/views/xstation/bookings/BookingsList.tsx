@@ -48,6 +48,9 @@ interface OrderItem {
   name: string
   price: number
   quantity: number
+  order_item_id?: number // Server-side order_item.id for existing items
+  order_id?: number // The parent order ID
+  original_quantity?: number // Original quantity from server for tracking changes
 }
 
 // Helper function to convert digits to Arabic numerals
@@ -85,6 +88,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   // Dialog states
   const [startBookingDialogOpen, setStartBookingDialogOpen] = useState(false)
   const [endBookingDialogOpen, setEndBookingDialogOpen] = useState(false)
+  const [deleteBookingDialogOpen, setDeleteBookingDialogOpen] = useState(false)
   const [switchRoomDialogOpen, setSwitchRoomDialogOpen] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<ActiveBooking | null>(null)
 
@@ -104,10 +108,17 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   const [availableItems, setAvailableItems] = useState<CafeteriaItem[]>([])
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [orderTab, setOrderTab] = useState(0)
+  const [existingOrderItems, setExistingOrderItems] = useState<OrderItem[]>([]) // Original items from server
+  const [hasExistingOrders, setHasExistingOrders] = useState(false) // Flag for update mode
 
   // View Orders Dialog states
   const [viewOrdersDialogOpen, setViewOrdersDialogOpen] = useState(false)
   const [selectedBookingOrders, setSelectedBookingOrders] = useState<any>(null)
+
+  // Update Discount Dialog states
+  const [updateDiscountDialogOpen, setUpdateDiscountDialogOpen] = useState(false)
+  const [selectedBookingForDiscount, setSelectedBookingForDiscount] = useState<ActiveBooking | null>(null)
+  const [newDiscount, setNewDiscount] = useState(0)
 
   // Timer states for countdown (now based on server finished_at)
   const [timers, setTimers] = useState<{ [bookingId: number]: number }>({}) // remaining seconds
@@ -420,6 +431,41 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     }
   }
 
+  const handleDeleteBooking = async () => {
+    if (!selectedBooking) return
+
+    try {
+      setIsSubmitting(true)
+      const bookingId = selectedBooking.id
+      const response = await bookingApi.delete(bookingId)
+
+      if (response.status === 'success') {
+        // Clean up timer state for this booking
+        setTimers(prev => {
+          const updated = { ...prev }
+          delete updated[bookingId]
+          return updated
+        })
+        setClientTimers(prev => {
+          const updated = { ...prev }
+          delete updated[bookingId]
+          return updated
+        })
+        
+        setSuccessMessage(dictionary?.bookings?.bookingDeleted || 'Booking deleted successfully')
+        setDeleteBookingDialogOpen(false)
+        setSelectedBooking(null)
+        fetchData()
+      } else {
+        setError(response.message || dictionary?.errors?.somethingWentWrong)
+      }
+    } catch (err) {
+      setError(dictionary?.errors?.networkError)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleEndBooking = async () => {
     if (!selectedBooking) return
 
@@ -478,6 +524,29 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     }
   }
 
+  const handleUpdateDiscount = async () => {
+    if (!selectedBookingForDiscount) return
+
+    try {
+      setIsSubmitting(true)
+      const response = await bookingApi.updateDiscount(selectedBookingForDiscount.id, newDiscount)
+
+      if (response.status === 'success') {
+        setSuccessMessage(dictionary?.bookings?.discountUpdated || 'Discount updated successfully')
+        setUpdateDiscountDialogOpen(false)
+        setSelectedBookingForDiscount(null)
+        setNewDiscount(0)
+        fetchData()
+      } else {
+        setError(response.message || dictionary?.errors?.somethingWentWrong)
+      }
+    } catch (err) {
+      setError(dictionary?.errors?.networkError)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   // Fetch cafeteria items for order dialog
   const fetchCafeteriaItems = useCallback(async () => {
     try {
@@ -493,10 +562,50 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   // Open add order dialog
   const handleOpenAddOrder = (booking: ActiveBooking) => {
     setSelectedBookingForOrder(booking)
-    setOrderItems([])
     setOrderTab(0)
     fetchCafeteriaItems()
+    
+    // Load existing order items from booking's orders
+    const bookingWithOrders = booking as any
+    if (bookingWithOrders.orders && bookingWithOrders.orders.length > 0) {
+      const existingItems: OrderItem[] = []
+      bookingWithOrders.orders.forEach((order: any) => {
+        if (order.items && order.items.length > 0) {
+          order.items.forEach((item: any) => {
+            // Check if item already exists in our list (merge quantities from different orders)
+            const existingIndex = existingItems.findIndex(ei => ei.item_id === item.item_id)
+            if (existingIndex >= 0) {
+              existingItems[existingIndex].quantity += Number(item.quantity)
+              existingItems[existingIndex].original_quantity = (existingItems[existingIndex].original_quantity || 0) + Number(item.quantity)
+            } else {
+              existingItems.push({
+                item_id: item.item_id,
+                name: item.item_name || item.name,
+                price: Number(item.unit_price || item.price),
+                quantity: Number(item.quantity),
+                order_item_id: item.id, // The order_item.id from server
+                order_id: order.id,
+                original_quantity: Number(item.quantity)
+              })
+            }
+          })
+        }
+      })
+      setOrderItems(existingItems)
+      setExistingOrderItems(JSON.parse(JSON.stringify(existingItems))) // Deep copy for comparison
+      setHasExistingOrders(true)
+    } else {
+      setOrderItems([])
+      setExistingOrderItems([])
+      setHasExistingOrders(false)
+    }
+    
     setAddOrderDialogOpen(true)
+  }
+
+  // Clear all items from order
+  const handleClearAllItems = () => {
+    setOrderItems([])
   }
 
   // Add item to order
@@ -528,34 +637,134 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   // Calculate order total
   const orderTotal = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
-  // Create order linked to booking
+  // Check if we're in update mode (has changes to existing items)
+  const isUpdateMode = hasExistingOrders && (
+    // Check if any existing items were removed
+    existingOrderItems.some(existing => !orderItems.find(item => item.order_item_id === existing.order_item_id)) ||
+    // Check if any existing items had quantity changed
+    existingOrderItems.some(existing => {
+      const current = orderItems.find(item => item.order_item_id === existing.order_item_id)
+      return current && current.quantity !== existing.original_quantity
+    }) ||
+    // Check if any new items were added
+    orderItems.some(item => !item.order_item_id)
+  )
+
+  // Create or update order linked to booking
   const handleCreateBookingOrder = async () => {
-    if (!selectedBookingForOrder || orderItems.length === 0) {
+    if (!selectedBookingForOrder) {
+      setError(dictionary?.errors?.somethingWentWrong || 'Something went wrong')
+      return
+    }
+
+    // If clearing all items from existing orders
+    if (hasExistingOrders && orderItems.length === 0) {
+      if (!isSuperadmin) {
+        setError(dictionary?.errors?.unauthorized || 'Only superadmin can delete order items')
+        return
+      }
+      
+      try {
+        setIsSubmitting(true)
+        // Delete all existing order items
+        for (const existingItem of existingOrderItems) {
+          if (existingItem.order_item_id) {
+            const response = await orderApi.deleteItem(existingItem.order_item_id)
+            if (response.status !== 'success') {
+              throw new Error(response.message || 'Failed to delete item')
+            }
+          }
+        }
+        setSuccessMessage(dictionary?.orders?.orderUpdated || 'Order items deleted successfully')
+        setAddOrderDialogOpen(false)
+        setSelectedBookingForOrder(null)
+        setOrderItems([])
+        setExistingOrderItems([])
+        setHasExistingOrders(false)
+        fetchData()
+      } catch (err: any) {
+        setError(err.message || dictionary?.errors?.networkError)
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
+
+    if (orderItems.length === 0) {
       setError(dictionary?.orders?.addItemsFirst || 'Please add items to the order')
       return
     }
 
     try {
       setIsSubmitting(true)
-      const response = await orderApi.quick({
-        customer_phone: selectedBookingForOrder.customer_phone || '0000000000',
-        customer_name: selectedBookingForOrder.customer_name || (dictionary?.bookings?.guestCustomer || 'Guest'),
-        items: orderItems.map(item => ({
-          item_id: item.item_id,
-          quantity: item.quantity
-        })),
-        booking_id: selectedBookingForOrder.id
-      })
 
-      if (response.status === 'success') {
-        setSuccessMessage(dictionary?.orders?.orderCreated || 'Order created successfully')
-        setAddOrderDialogOpen(false)
-        setSelectedBookingForOrder(null)
-        setOrderItems([])
-        fetchData()
-      } else {
-        setError(response.message || dictionary?.errors?.somethingWentWrong)
+      // Handle updates to existing items
+      if (hasExistingOrders && isSuperadmin) {
+        // Find items to delete (existing items no longer in the list)
+        const itemsToDelete = existingOrderItems.filter(
+          existing => !orderItems.find(item => item.order_item_id === existing.order_item_id)
+        )
+        
+        // Delete removed items
+        for (const item of itemsToDelete) {
+          if (item.order_item_id) {
+            const response = await orderApi.deleteItem(item.order_item_id)
+            if (response.status !== 'success') {
+              console.error('Failed to delete item:', item.name)
+            }
+          }
+        }
+
+        // Find items to update (quantity changed)
+        const itemsToUpdate = orderItems.filter(item => {
+          if (!item.order_item_id) return false
+          const existing = existingOrderItems.find(e => e.order_item_id === item.order_item_id)
+          return existing && item.quantity !== existing.original_quantity
+        })
+        
+        // Update items with changed quantities
+        for (const item of itemsToUpdate) {
+          if (item.order_item_id) {
+            const response = await orderApi.updateItem(item.order_item_id, item.quantity)
+            if (response.status !== 'success') {
+              console.error('Failed to update item:', item.name)
+            }
+          }
+        }
       }
+
+      // Find new items to add
+      const newItems = orderItems.filter(item => !item.order_item_id)
+      
+      // Create order for new items only
+      if (newItems.length > 0) {
+        const response = await orderApi.quick({
+          customer_phone: selectedBookingForOrder.customer_phone || '0000000000',
+          customer_name: selectedBookingForOrder.customer_name || (dictionary?.bookings?.guestCustomer || 'Guest'),
+          items: newItems.map(item => ({
+            item_id: item.item_id,
+            quantity: item.quantity
+          })),
+          booking_id: selectedBookingForOrder.id
+        })
+
+        if (response.status !== 'success') {
+          setError(response.message || dictionary?.errors?.somethingWentWrong)
+          return
+        }
+      }
+
+      setSuccessMessage(
+        hasExistingOrders 
+          ? (dictionary?.orders?.orderUpdated || 'Order updated successfully')
+          : (dictionary?.orders?.orderCreated || 'Order created successfully')
+      )
+      setAddOrderDialogOpen(false)
+      setSelectedBookingForOrder(null)
+      setOrderItems([])
+      setExistingOrderItems([])
+      setHasExistingOrders(false)
+      fetchData()
     } catch (err) {
       setError(dictionary?.errors?.networkError)
     } finally {
@@ -907,6 +1116,7 @@ ${ordersHtml}
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.duration || 'Duration'}</th>
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.timer || 'Timer'}</th>
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.navigation?.orders || 'Orders'}</th>
+                      <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.discount || 'Discount'}</th>
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.price || 'Price'}</th>
                       <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.common?.actions || 'Actions'}</th>
                     </tr>
@@ -1088,6 +1298,22 @@ ${ordersHtml}
                               )}
                             </td>
                             <td className='p-3'>
+                              {Number(booking.discount) > 0 ? (
+                                <div className='flex flex-col gap-0.5'>
+                                  <Typography variant='body2' fontWeight={500} color='error.main'>
+                                    -{isRtl ? toArabicDigits(Number(booking.discount).toFixed(2)) : Number(booking.discount).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                                  </Typography>
+                                  <Typography variant='caption' color='text.secondary'>
+                                    {dictionary?.bookings?.discount || 'Discount'}
+                                  </Typography>
+                                </div>
+                              ) : (
+                                <Typography variant='caption' color='text.secondary'>
+                                  {dictionary?.common?.no || 'No'} {dictionary?.bookings?.discount?.toLowerCase() || 'discount'}
+                                </Typography>
+                              )}
+                            </td>
+                            <td className='p-3'>
                               <div className='flex flex-col gap-0.5'>
                                 <Typography variant='body2' fontWeight={500} color='success.main'>
                                   {isActive
@@ -1117,6 +1343,30 @@ ${ordersHtml}
                                   >
                                     <i className='tabler-shopping-cart-plus' />
                                   </IconButton>
+                                  <IconButton
+                                    size='small'
+                                    color='warning'
+                                    onClick={() => {
+                                      setSelectedBookingForDiscount(booking as ActiveBooking)
+                                      setNewDiscount(Number(booking.discount) || 0)
+                                      setUpdateDiscountDialogOpen(true)
+                                    }}
+                                    title={dictionary?.bookings?.updateDiscount || 'Update Discount'}
+                                  >
+                                    <i className='tabler-discount' />
+                                  </IconButton>
+                                  <Button
+                                    variant='outlined'
+                                    color='error'
+                                    size='small'
+                                    onClick={() => {
+                                      setSelectedBooking(booking as ActiveBooking)
+                                      setDeleteBookingDialogOpen(true)
+                                    }}
+                                  >
+                                    <i className='tabler-trash' style={{ marginRight: isRtl ? 0 : 4, marginLeft: isRtl ? 4 : 0 }} />
+                                    {dictionary?.bookings?.deleteBooking || 'Delete'}
+                                  </Button>
                                   <Button
                                     variant='contained'
                                     color='error'
@@ -1140,6 +1390,30 @@ ${ordersHtml}
                                   >
                                     <i className='tabler-shopping-cart-plus' />
                                   </IconButton>
+                                  <IconButton
+                                    size='small'
+                                    color='warning'
+                                    onClick={() => {
+                                      setSelectedBookingForDiscount(booking as ActiveBooking)
+                                      setNewDiscount(Number(booking.discount) || 0)
+                                      setUpdateDiscountDialogOpen(true)
+                                    }}
+                                    title={dictionary?.bookings?.updateDiscount || 'Update Discount'}
+                                  >
+                                    <i className='tabler-discount' />
+                                  </IconButton>
+                                  <Button
+                                    variant='outlined'
+                                    color='error'
+                                    size='small'
+                                    onClick={() => {
+                                      setSelectedBooking(booking as ActiveBooking)
+                                      setDeleteBookingDialogOpen(true)
+                                    }}
+                                  >
+                                    <i className='tabler-trash' style={{ marginRight: isRtl ? 0 : 4, marginLeft: isRtl ? 4 : 0 }} />
+                                    {dictionary?.bookings?.deleteBooking || 'Delete'}
+                                  </Button>
                                   <Button
                                     variant='contained'
                                     color='error'
@@ -1498,6 +1772,46 @@ ${ordersHtml}
         </DialogActions>
       </Dialog>
 
+      {/* Delete Booking Dialog */}
+      <Dialog open={deleteBookingDialogOpen} onClose={() => setDeleteBookingDialogOpen(false)} dir={isRtl ? 'rtl' : 'ltr'}>
+        <DialogTitle className={isRtl ? 'text-right' : ''}>{dictionary?.bookings?.deleteBooking || 'Delete Booking'}</DialogTitle>
+        <DialogContent>
+          {selectedBooking && (
+            <div className='flex flex-col gap-3 pt-2'>
+              <Alert severity="warning">
+                {dictionary?.bookings?.confirmDelete || 'Are you sure you want to delete this booking? This action cannot be undone.'}
+              </Alert>
+              <Card variant='outlined'>
+                <CardContent>
+                  <Typography variant='subtitle2' fontWeight={600}>
+                    {selectedBooking.room_name}
+                  </Typography>
+                  <Typography variant='body2'>{selectedBooking.customer_name}</Typography>
+                  <Typography variant='body2' color='text.secondary'>
+                    {(() => {
+                      const hrs = selectedBooking.current_duration_hours || selectedBooking.elapsed_hours || 0;
+                      const minsVal = Math.round(hrs * 60);
+                      const hrsVal = hrs.toFixed(1);
+                      return hrs < 1 
+                        ? `${isRtl ? toArabicDigits(minsVal.toString()) : minsVal} ${dictionary?.common?.mins || 'mins'}` 
+                        : `${isRtl ? toArabicDigits(hrsVal) : hrsVal} ${dictionary?.common?.hours || 'hours'}`;
+                    })()}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions className={isRtl ? 'flex-row-reverse justify-start' : ''}>
+          <Button onClick={() => setDeleteBookingDialogOpen(false)} disabled={isSubmitting}>
+            {dictionary?.common?.cancel || 'Cancel'}
+          </Button>
+          <Button variant='contained' color='error' onClick={handleDeleteBooking} disabled={isSubmitting}>
+            {isSubmitting ? <CircularProgress size={20} /> : dictionary?.bookings?.deleteBooking || 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Switch Room Dialog */}
       <Dialog open={switchRoomDialogOpen} onClose={() => setSwitchRoomDialogOpen(false)} maxWidth='sm' fullWidth dir={isRtl ? 'rtl' : 'ltr'}>
         <DialogTitle className={isRtl ? 'text-right' : ''}>{dictionary?.bookings?.switchRoom || 'Switch Room'}</DialogTitle>
@@ -1620,12 +1934,23 @@ ${ordersHtml}
                           {orderItems.map(item => (
                             <div
                               key={item.item_id}
-                              className={`flex items-center justify-between p-3 border rounded-lg ${isRtl ? 'flex-row-reverse' : ''}`}
+                              className={`flex items-center justify-between p-3 border rounded-lg ${item.order_item_id ? 'border-primary/30 bg-primary/5' : ''} ${isRtl ? 'flex-row-reverse' : ''}`}
                             >
                               <div className={isRtl ? 'text-right' : ''}>
-                                <Typography variant='body2' fontWeight={500}>
-                                  {item.name}
-                                </Typography>
+                                <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                  <Typography variant='body2' fontWeight={500}>
+                                    {item.name}
+                                  </Typography>
+                                  {item.order_item_id && (
+                                    <Chip 
+                                      label={dictionary?.orders?.existing || 'Existing'} 
+                                      size='small' 
+                                      color='primary' 
+                                      variant='outlined'
+                                      sx={{ height: 20, fontSize: '0.65rem' }}
+                                    />
+                                  )}
+                                </div>
                                 <Typography variant='caption' color='text.secondary'>
                                   {isRtl ? toArabicDigits(String(item.price)) : item.price} {dictionary?.common?.currency || 'EGP'} x {isRtl ? toArabicDigits(String(item.quantity)) : item.quantity} = {isRtl ? toArabicDigits((item.price * item.quantity).toFixed(2)) : (item.price * item.quantity).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
                                 </Typography>
@@ -1634,8 +1959,9 @@ ${ordersHtml}
                                 <IconButton
                                   size='small'
                                   onClick={() => updateItemQuantity(item.item_id, item.quantity - 1)}
+                                  color={item.order_item_id && item.quantity <= 1 ? 'error' : 'default'}
                                 >
-                                  <i className='tabler-minus text-sm' />
+                                  <i className={`${item.order_item_id && item.quantity <= 1 ? 'tabler-trash' : 'tabler-minus'} text-sm`} />
                                 </IconButton>
                                 <Typography variant='body2' className='w-8 text-center'>
                                   {isRtl ? toArabicDigits(String(item.quantity)) : item.quantity}
@@ -1661,7 +1987,10 @@ ${ordersHtml}
                         </div>
                       ) : (
                         <Typography color='text.secondary' className='text-center py-8'>
-                          {dictionary?.orders?.addItemsFirst || 'Add items to the order'}
+                          {hasExistingOrders 
+                            ? (dictionary?.orders?.allItemsCleared || 'All items cleared. Click Delete All Items to confirm.')
+                            : (dictionary?.orders?.addItemsFirst || 'Add items to the order')
+                          }
                         </Typography>
                       )}
                     </div>
@@ -1671,21 +2000,98 @@ ${ordersHtml}
             </div>
           )}
         </DialogContent>
-        <DialogActions sx={{ flexDirection: isRtl ? 'row-reverse' : 'row', gap: 1 }}>
-          <Button onClick={() => setAddOrderDialogOpen(false)} disabled={isSubmitting}>
+        <DialogActions sx={{ flexDirection: isRtl ? 'row-reverse' : 'row', gap: 1, justifyContent: 'space-between' }}>
+          <div className={`flex gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <Button onClick={() => setAddOrderDialogOpen(false)} disabled={isSubmitting}>
+              {dictionary?.common?.cancel || 'Cancel'}
+            </Button>
+            {orderItems.length > 0 && (
+              <Button 
+                color='error' 
+                variant='outlined'
+                startIcon={<i className='tabler-trash' />}
+                onClick={handleClearAllItems}
+                disabled={isSubmitting}
+              >
+                {dictionary?.orders?.clearAll || 'Clear All'}
+              </Button>
+            )}
+          </div>
+          <Button
+            variant='contained'
+            color={hasExistingOrders && orderItems.length === 0 ? 'error' : 'primary'}
+            startIcon={<i className={hasExistingOrders && orderItems.length === 0 ? 'tabler-trash' : 'tabler-shopping-cart-check'} />}
+            onClick={handleCreateBookingOrder}
+            disabled={isSubmitting || (!hasExistingOrders && orderItems.length === 0)}
+          >
+            {isSubmitting ? (
+              <CircularProgress size={20} />
+            ) : hasExistingOrders && orderItems.length === 0 ? (
+              dictionary?.orders?.deleteAllItems || 'Delete All Items'
+            ) : isUpdateMode ? (
+              `${dictionary?.orders?.updateOrder || 'Update Order'} (${isRtl ? toArabicDigits(orderTotal.toFixed(2)) : orderTotal.toFixed(2)} ${dictionary?.common?.currency || 'EGP'})`
+            ) : (
+              `${dictionary?.orders?.createOrder || 'Create Order'} (${isRtl ? toArabicDigits(orderTotal.toFixed(2)) : orderTotal.toFixed(2)} ${dictionary?.common?.currency || 'EGP'})`
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Update Discount Dialog */}
+      <Dialog open={updateDiscountDialogOpen} onClose={() => setUpdateDiscountDialogOpen(false)} maxWidth='sm' fullWidth dir={isRtl ? 'rtl' : 'ltr'}>
+        <DialogTitle className={isRtl ? 'text-right' : ''}>
+          {dictionary?.bookings?.updateDiscount || 'Update Discount'}
+        </DialogTitle>
+        <DialogContent>
+          <div className='flex flex-col gap-4 pt-2'>
+            <div className={`flex items-center gap-3 p-3 rounded-lg bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <i className='tabler-door text-2xl text-primary' />
+              <div className={isRtl ? 'text-right' : ''}>
+                <Typography variant='subtitle1' fontWeight={600}>
+                  {selectedBookingForDiscount?.room_name}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  {selectedBookingForDiscount?.customer_name} • {selectedBookingForDiscount?.customer_phone}
+                </Typography>
+              </div>
+            </div>
+
+            <div className={`p-3 rounded-lg border ${isRtl ? 'text-right' : ''}`}>
+              <Typography variant='caption' color='text.secondary' className='block mb-1'>
+                {dictionary?.bookings?.currentDiscount || 'Current Discount'}
+              </Typography>
+              <Typography variant='h6' color='error.main'>
+                {isRtl ? toArabicDigits(Number(selectedBookingForDiscount?.discount || 0).toFixed(2)) : Number(selectedBookingForDiscount?.discount || 0).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+              </Typography>
+            </div>
+
+            <CustomTextField
+              type="number"
+              label={dictionary?.bookings?.newDiscount || 'New Discount'}
+              value={newDiscount}
+              onChange={e => setNewDiscount(Number(e.target.value))}
+              fullWidth
+              helperText={dictionary?.bookings?.discountHelperText || 'Discount amount in EGP (not percentage)'}
+              InputProps={{
+                startAdornment: isRtl ? undefined : <InputAdornment position="start">{dictionary?.common?.currency || 'EGP'}</InputAdornment>,
+                endAdornment: isRtl ? <InputAdornment position="end">{dictionary?.common?.currency || 'EGP'}</InputAdornment> : undefined,
+                inputProps: { min: 0, step: 0.01 }
+              }}
+            />
+          </div>
+        </DialogContent>
+        <DialogActions className={isRtl ? 'flex-row-reverse justify-start' : ''}>
+          <Button onClick={() => setUpdateDiscountDialogOpen(false)} disabled={isSubmitting}>
             {dictionary?.common?.cancel || 'Cancel'}
           </Button>
           <Button
             variant='contained'
-            startIcon={<i className='tabler-shopping-cart-check' />}
-            onClick={handleCreateBookingOrder}
-            disabled={isSubmitting || orderItems.length === 0}
+            color='warning'
+            onClick={handleUpdateDiscount}
+            disabled={isSubmitting}
+            startIcon={isSubmitting ? <CircularProgress size={20} /> : <i className='tabler-discount-check' />}
           >
-            {isSubmitting ? (
-              <CircularProgress size={20} />
-            ) : (
-              `${dictionary?.orders?.createOrder || 'Create Order'} (${isRtl ? toArabicDigits(orderTotal.toFixed(2)) : orderTotal.toFixed(2)} ${dictionary?.common?.currency || 'EGP'})`
-            )}
+            {dictionary?.common?.update || 'Update'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -270,7 +270,19 @@
     "customerOptional": "اختياري - الافتراضي زائر",
     "roomCost": "تكلفة الغرفة",
     "roomDuration": "مدة الغرفة",
-    "noRecentBookings": "لا توجد حجوزات حديثة"
+    "noRecentBookings": "لا توجد حجوزات حديثة",
+    "bookingType": "نوع الحجز",
+    "single": "لاعب منفرد",
+    "multi": "متعدد اللاعبين",
+    "discount": "الخصم",
+    "discountHelperText": "قيمة الخصم بالجنيه المصري (وليس نسبة مئوية)",
+    "updateDiscount": "تحديث الخصم",
+    "currentDiscount": "الخصم الحالي",
+    "newDiscount": "الخصم الجديد",
+    "discountUpdated": "تم تحديث الخصم بنجاح",
+    "deleteBooking": "حذف الحجز",
+    "confirmDelete": "هل أنت متأكد من حذف هذا الحجز؟ هذا الإجراء لا يمكن التراجع عنه.",
+    "bookingDeleted": "تم حذف الحجز بنجاح"
   },
   "customers": {
     "title": "العملاء",
@@ -396,7 +408,12 @@
     "receipt": "إيصال",
     "thankYou": "شكراً لطلبك!",
     "printReceipt": "طباعة الإيصال",
-    "viewOrder": "عرض الطلب"
+    "viewOrder": "عرض الطلب",
+    "clearAll": "مسح الكل",
+    "deleteAllItems": "حذف جميع العناصر",
+    "updateOrder": "تحديث الطلب",
+    "existing": "موجود",
+    "allItemsCleared": "تم مسح جميع العناصر. انقر على حذف جميع العناصر للتأكيد."
   },
   "analytics": {
     "title": "التحليلات",

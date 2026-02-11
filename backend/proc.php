@@ -103,9 +103,6 @@ function logout(){
         respond('error', 'No authorization token provided.');
     }
     
-    // End shift BEFORE invalidating session (so getAdmin() still works)
-    endShift(null, false);
-    
     // Now invalidate the session
     $stmt = $conn->prepare("UPDATE session SET status = 'inactive' WHERE token = ?");
     $stmt->bind_param("s", $token);
@@ -2293,80 +2290,246 @@ function deleteOrderItems(){
     global $conn;
     $admin = getAdmin();
     
+    // Only superadmin can delete order items
+    if($admin['role'] != 'superadmin'){
+        respond('error', 'Unauthorized. Only superadmin can delete order items.');
+    }
+    
     $input = requireParams(['order_item_id']);
     $order_item_id = (int)$input['order_item_id'];
     
-    // Get order item details
-    $stmt = $conn->prepare("SELECT oi.*, o.discount as order_discount FROM order_items oi JOIN orders o ON oi.order_id = o.id WHERE oi.id = ?");
-    $stmt->bind_param("i", $order_item_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $orderItem = $result->fetch_assoc();
-    $stmt->close();
+    // Start transaction for data consistency
+    $conn->begin_transaction();
     
-    if(!$orderItem){
-        respond('error', 'Order item not found.');
-    }
-    
-    $order_id = $orderItem['order_id'];
-    $item_id = $orderItem['item_id'];
-    $quantity = $orderItem['quantity'];
-    $item_total_price = (float)$orderItem['total_price'];
-    $order_discount = (float)$orderItem['order_discount'];
-    
-    // Restore stock
-    $stmt = $conn->prepare("UPDATE cafeteria_items SET stock = stock + ? WHERE id = ?");
-    $stmt->bind_param("ii", $quantity, $item_id);
-    $stmt->execute();
-    $stmt->close();
-    
-    // Delete the order item
-    $stmt = $conn->prepare("DELETE FROM order_items WHERE id = ?");
-    $stmt->bind_param("i", $order_item_id);
-    $stmt->execute();
-    $stmt->close();
-    
-    // Check if there are remaining items in the order
-    $stmt = $conn->prepare("SELECT COUNT(*) as remaining_count, COALESCE(SUM(total_price), 0) as new_subtotal FROM order_items WHERE order_id = ?");
-    $stmt->bind_param("i", $order_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $remaining = $result->fetch_assoc();
-    $stmt->close();
-    
-    if((int)$remaining['remaining_count'] == 0){
-        // No items left, delete the order
-        $stmt = $conn->prepare("DELETE FROM orders WHERE id = ?");
+    try {
+        // Get order item details with row lock to prevent race conditions
+        $stmt = $conn->prepare("SELECT oi.*, o.discount as order_discount, ci.name as item_name FROM order_items oi JOIN orders o ON oi.order_id = o.id JOIN cafeteria_items ci ON oi.item_id = ci.id WHERE oi.id = ? FOR UPDATE");
+        $stmt->bind_param("i", $order_item_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $orderItem = $result->fetch_assoc();
+        $stmt->close();
+        
+        if(!$orderItem){
+            $conn->rollback();
+            respond('error', 'Order item not found.');
+        }
+        
+        $order_id = $orderItem['order_id'];
+        $item_id = $orderItem['item_id'];
+        $quantity = $orderItem['quantity'];
+        $item_name = $orderItem['item_name'];
+        $item_total_price = (float)$orderItem['total_price'];
+        $order_discount = (float)$orderItem['order_discount'];
+        
+        // Restore stock with row lock
+        $stmt = $conn->prepare("UPDATE cafeteria_items SET stock = stock + ? WHERE id = ?");
+        $stmt->bind_param("ii", $quantity, $item_id);
+        if(!$stmt->execute()){
+            throw new Exception('Failed to restore stock.');
+        }
+        $stmt->close();
+        
+        // Delete the order item
+        $stmt = $conn->prepare("DELETE FROM order_items WHERE id = ?");
+        $stmt->bind_param("i", $order_item_id);
+        if(!$stmt->execute()){
+            throw new Exception('Failed to delete order item.');
+        }
+        $stmt->close();
+        
+        // Check if there are remaining items in the order
+        $stmt = $conn->prepare("SELECT COUNT(*) as remaining_count, COALESCE(SUM(total_price), 0) as new_subtotal FROM order_items WHERE order_id = ?");
         $stmt->bind_param("i", $order_id);
         $stmt->execute();
+        $result = $stmt->get_result();
+        $remaining = $result->fetch_assoc();
         $stmt->close();
         
-        respond('success', [
-            'message' => 'Order item deleted and stock restored. Order was also deleted as it had no remaining items.',
-            'order_deleted' => true,
-            'stock_restored' => $quantity
-        ]);
-    } else {
-        // Recalculate order total
-        $new_subtotal = (float)$remaining['new_subtotal'];
-        $new_price = $new_subtotal - $order_discount;
-        if($new_price < 0) $new_price = 0;
-        
-        $stmt = $conn->prepare("UPDATE orders SET price = ? WHERE id = ?");
-        $stmt->bind_param("di", $new_price, $order_id);
-        $stmt->execute();
-        $stmt->close();
-        
-        respond('success', [
-            'message' => 'Order item deleted and stock restored.',
-            'order_deleted' => false,
-            'stock_restored' => $quantity,
-            'new_order_subtotal' => $new_subtotal,
-            'new_order_total' => $new_price,
-            'remaining_items' => (int)$remaining['remaining_count']
-        ]);
+        if((int)$remaining['remaining_count'] == 0){
+            // No items left, delete the order
+            $stmt = $conn->prepare("DELETE FROM orders WHERE id = ?");
+            $stmt->bind_param("i", $order_id);
+            if(!$stmt->execute()){
+                throw new Exception('Failed to delete empty order.');
+            }
+            $stmt->close();
+            
+            // Commit transaction
+            $conn->commit();
+            
+            respond('success', [
+                'message' => 'Order item deleted and stock restored. Order was also deleted as it had no remaining items.',
+                'order_deleted' => true,
+                'stock_restored' => $quantity,
+                'item_name' => $item_name,
+                'deleted_by' => $admin['username']
+            ]);
+        } else {
+            // Recalculate order total based on remaining items
+            $new_subtotal = (float)$remaining['new_subtotal'];
+            $new_price = $new_subtotal - $order_discount;
+            if($new_price < 0) $new_price = 0;
+            
+            $stmt = $conn->prepare("UPDATE orders SET price = ? WHERE id = ?");
+            $stmt->bind_param("di", $new_price, $order_id);
+            if(!$stmt->execute()){
+                throw new Exception('Failed to update order total.');
+            }
+            $stmt->close();
+            
+            // Commit transaction
+            $conn->commit();
+            
+            respond('success', [
+                'message' => 'Order item deleted and stock restored.',
+                'order_deleted' => false,
+                'stock_restored' => $quantity,
+                'item_name' => $item_name,
+                'new_order_subtotal' => $new_subtotal,
+                'new_order_total' => $new_price,
+                'remaining_items' => (int)$remaining['remaining_count'],
+                'deleted_by' => $admin['username']
+            ]);
+        }
+    } catch (Exception $e) {
+        // Rollback transaction on any error
+        $conn->rollback();
+        respond('error', 'Failed to delete order item: ' . $e->getMessage());
     }
 }
+function updateOrderItem(){
+    global $conn;
+    $admin = getAdmin();
+    
+    // Only superadmin can update order items
+    if($admin['role'] != 'superadmin'){
+        respond('error', 'Unauthorized. Only superadmin can update order items.');
+    }
+    
+    $input = requireParams(['order_item_id', 'quantity']);
+    $order_item_id = (int)$input['order_item_id'];
+    $new_quantity = (int)$input['quantity'];
+    
+    if($new_quantity <= 0){
+        respond('error', 'Quantity must be greater than 0.');
+    }
+    
+    // Start transaction for data consistency
+    $conn->begin_transaction();
+    
+    try {
+        // Get order item details with row lock to prevent race conditions
+        $stmt = $conn->prepare("SELECT oi.*, ci.stock, ci.name as item_name, ci.price as item_price FROM order_items oi JOIN cafeteria_items ci ON oi.item_id = ci.id WHERE oi.id = ? FOR UPDATE");
+        $stmt->bind_param("i", $order_item_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $orderItem = $result->fetch_assoc();
+        $stmt->close();
+        
+        if(!$orderItem){
+            $conn->rollback();
+            respond('error', 'Order item not found.');
+        }
+        
+        $current_quantity = (int)$orderItem['quantity'];
+        $order_id = (int)$orderItem['order_id'];
+        $item_id = (int)$orderItem['item_id'];
+        $item_name = $orderItem['item_name'];
+        $item_price = (float)$orderItem['item_price'];
+        $stock_available = (int)$orderItem['stock'] + $current_quantity; // Add back current quantity to stock
+        
+        if($new_quantity > $stock_available){
+            $conn->rollback();
+            respond('error', "Insufficient stock for {$item_name}. Available: {$stock_available}");
+        }
+        
+        // Calculate quantity difference
+        $quantity_diff = $new_quantity - $current_quantity;
+        
+        if($quantity_diff == 0){
+            $conn->rollback();
+            respond('success', 'Quantity is the same as current. No update needed.');
+        }
+        
+        // Update the order item quantity and total price
+        $new_total_price = round($item_price * $new_quantity, 2);
+        $stmt = $conn->prepare("UPDATE order_items SET quantity = ?, total_price = ? WHERE id = ?");
+        $stmt->bind_param("idi", $new_quantity, $new_total_price, $order_item_id);
+        if(!$stmt->execute()){
+            throw new Exception('Failed to update order item.');
+        }
+        $stmt->close();
+        
+        // Update stock
+        if($quantity_diff > 0){
+            // Decrease stock (more items ordered)
+            $stmt = $conn->prepare("UPDATE cafeteria_items SET stock = stock - ? WHERE id = ?");
+            $stmt->bind_param("ii", $quantity_diff, $item_id);
+        } else {
+            // Increase stock (fewer items ordered)
+            $abs_diff = abs($quantity_diff);
+            $stmt = $conn->prepare("UPDATE cafeteria_items SET stock = stock + ? WHERE id = ?");
+            $stmt->bind_param("ii", $abs_diff, $item_id);
+        }
+        
+        if(!$stmt->execute()){
+            throw new Exception('Failed to adjust stock.');
+        }
+        $stmt->close();
+        
+        // Recalculate parent order total
+        $stmt = $conn->prepare("SELECT COALESCE(SUM(total_price), 0) as new_subtotal FROM order_items WHERE order_id = ?");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $subtotalData = $result->fetch_assoc();
+        $stmt->close();
+        
+        // Get order discount
+        $stmt = $conn->prepare("SELECT discount FROM orders WHERE id = ?");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $orderData = $result->fetch_assoc();
+        $stmt->close();
+        
+        $new_subtotal = (float)$subtotalData['new_subtotal'];
+        $order_discount = (float)$orderData['discount'];
+        $new_order_total = $new_subtotal - $order_discount;
+        if($new_order_total < 0) $new_order_total = 0;
+        
+        // Update parent order total
+        $stmt = $conn->prepare("UPDATE orders SET price = ? WHERE id = ?");
+        $stmt->bind_param("di", $new_order_total, $order_id);
+        if(!$stmt->execute()){
+            throw new Exception('Failed to update order total.');
+        }
+        $stmt->close();
+        
+        // Commit transaction
+        $conn->commit();
+        
+        respond('success', [
+            'message' => 'Order item updated successfully.',
+            'item_name' => $item_name,
+            'old_quantity' => $current_quantity,
+            'new_quantity' => $new_quantity,
+            'quantity_change' => $quantity_diff,
+            'new_item_total' => $new_total_price,
+            'stock_adjusted_by' => $quantity_diff,
+            'new_order_subtotal' => $new_subtotal,
+            'new_order_total' => $new_order_total,
+            'updated_by' => $admin['username']
+        ]);
+        
+    } catch (Exception $e) {
+        // Rollback transaction on any error
+        $conn->rollback();
+        respond('error', 'Failed to update order item: ' . $e->getMessage());
+    }
+}
+
 
 function listOrders(){
     global $conn;

@@ -151,6 +151,11 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
   // Recent bookings state
   const [recentBookings, setRecentBookings] = useState<any[]>([])
 
+  // Update Discount Dialog states
+  const [updateDiscountDialogOpen, setUpdateDiscountDialogOpen] = useState(false)
+  const [selectedBookingForDiscount, setSelectedBookingForDiscount] = useState<ActiveBooking | null>(null)
+  const [newDiscount, setNewDiscount] = useState(0)
+
   const fetchData = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setIsLoading(true)
@@ -424,6 +429,29 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
         setEndBookingDialogOpen(false)
         setSelectedBooking(null)
         setShowReceiptDialog(true) // Show receipt dialog
+        fetchData()
+      } else {
+        setError(response.message || dictionary?.errors?.somethingWentWrong)
+      }
+    } catch (err) {
+      setError(dictionary?.errors?.networkError)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleUpdateDiscount = async () => {
+    if (!selectedBookingForDiscount) return
+
+    try {
+      setIsSubmitting(true)
+      const response = await bookingApi.updateDiscount(selectedBookingForDiscount.id, newDiscount)
+
+      if (response.status === 'success') {
+        setSuccessMessage(dictionary?.bookings?.discountUpdated || 'Discount updated successfully')
+        setUpdateDiscountDialogOpen(false)
+        setSelectedBookingForDiscount(null)
+        setNewDiscount(0)
         fetchData()
       } else {
         setError(response.message || dictionary?.errors?.somethingWentWrong)
@@ -1048,7 +1076,7 @@ ${ordersHtml}
       </Grid>
 
       {/* Active Bookings */}
-      <Grid size={{ xs: 12, lg: 8 }}>
+      <Grid size={{ xs: 12 }}>
         <Card>
           <CardHeader title={dictionary?.frontDesk?.activeSessionsTitle || 'Active Sessions'} />
           <CardContent>
@@ -1062,6 +1090,7 @@ ${ordersHtml}
                       <th className='text-start p-2 text-sm'>{dictionary?.bookings?.duration || 'Duration'}</th>
                       <th className='text-start p-2 text-sm'>{dictionary?.bookings?.timer || 'Timer'}</th>
                       <th className='text-start p-2 text-sm'>{dictionary?.navigation?.orders || 'Orders'}</th>
+                      <th className='text-start p-2 text-sm'>{dictionary?.bookings?.discount || 'Discount'}</th>
                       <th className='text-start p-2 text-sm'>{dictionary?.bookings?.estimatedPrice || 'Est. Price'}</th>
                       <th className='text-start p-2 text-sm'>{dictionary?.common?.actions || 'Actions'}</th>
                     </tr>
@@ -1185,6 +1214,22 @@ ${ordersHtml}
                           )}
                         </td>
                         <td className='p-3'>
+                          {/* Discount if any */}
+                          {Number(booking.discount) > 0 ? (
+                            <Chip
+                              icon={<i className='tabler-discount text-sm' />}
+                              label={`-${Number(booking.discount || 0).toFixed(2)} ${dictionary?.common?.currency || 'EGP'}`}
+                              color='error'
+                              size='small'
+                              variant='tonal'
+                            />
+                          ) : (
+                            <Typography variant='caption' color='text.secondary'>
+                              -
+                            </Typography>
+                          )}
+                        </td>
+                        <td className='p-3'>
                           <div className='flex flex-col gap-0.5'>
                             <Typography variant='body2' color='success.main' fontWeight={500}>
                               ~{booking.estimated_price?.toFixed(2)} {dictionary?.common?.currency || 'EGP'}
@@ -1203,14 +1248,6 @@ ${ordersHtml}
                         </td>
                         <td className='p-3'>
                           <div className='flex gap-2'>
-                            <IconButton
-                              size='small'
-                              color='info'
-                              onClick={() => handleOpenAddOrderToBooking(booking as ActiveBooking)}
-                              title={dictionary?.orders?.addOrderToBooking || 'Add Order'}
-                            >
-                              <i className='tabler-shopping-cart-plus' />
-                            </IconButton>
                             <Button
                               variant='contained'
                               color='error'
@@ -1222,6 +1259,26 @@ ${ordersHtml}
                             >
                               {dictionary?.bookings?.endBooking || 'End'}
                             </Button>
+                            <IconButton
+                              size='small'
+                              color='warning'
+                              onClick={() => {
+                                setSelectedBookingForDiscount(booking as ActiveBooking)
+                                setNewDiscount(Number(booking.discount) || 0)
+                                setUpdateDiscountDialogOpen(true)
+                              }}
+                              title={dictionary?.bookings?.updateDiscount || 'Update Discount'}
+                            >
+                              <i className='tabler-discount' />
+                            </IconButton>
+                            <IconButton
+                              size='small'
+                              color='info'
+                              onClick={() => handleOpenAddOrderToBooking(booking as ActiveBooking)}
+                              title={dictionary?.orders?.addOrderToBooking || 'Add Order'}
+                            >
+                              <i className='tabler-shopping-cart-plus' />
+                            </IconButton>
                           </div>
                         </td>
                       </tr>
@@ -1242,8 +1299,8 @@ ${ordersHtml}
       </Grid>
 
       {/* Stock Alerts */}
-      <Grid size={{ xs: 12, lg: 4 }}>
-        <Card className='h-full'>
+      <Grid size={{ xs: 12 }}>
+        <Card>
           <CardHeader
             title={dictionary?.frontDesk?.stockAlerts || 'Stock Alerts'}
             avatar={
@@ -1258,7 +1315,7 @@ ${ordersHtml}
           />
           <CardContent>
             {data?.stock_alerts?.low_stock_items && data.stock_alerts.low_stock_items.length > 0 ? (
-              <div className='flex flex-col gap-3'>
+              <div className='flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-2'>
                 {data.stock_alerts.low_stock_items.map(item => (
                   <div
                     key={item.id}
@@ -1712,6 +1769,65 @@ ${ordersHtml}
           </Button>
           <Button variant='contained' color='error' onClick={handleEndBooking} disabled={isSubmitting}>
             {isSubmitting ? <CircularProgress size={20} /> : dictionary?.bookings?.endBooking || 'End'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Update Discount Dialog */}
+      <Dialog open={updateDiscountDialogOpen} onClose={() => setUpdateDiscountDialogOpen(false)} maxWidth='sm' fullWidth dir={isRtl ? 'rtl' : 'ltr'}>
+        <DialogTitle className={isRtl ? 'text-right' : ''}>
+          {dictionary?.bookings?.updateDiscount || 'Update Discount'}
+        </DialogTitle>
+        <DialogContent>
+          <div className='flex flex-col gap-4 pt-2'>
+            <div className={`flex items-center gap-3 p-3 rounded-lg bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <i className='tabler-door text-2xl text-primary' />
+              <div className={isRtl ? 'text-right' : ''}>
+                <Typography variant='subtitle1' fontWeight={600}>
+                  {selectedBookingForDiscount?.room_name}
+                </Typography>
+                <Typography variant='body2' color='text.secondary'>
+                  {selectedBookingForDiscount?.customer_name} • {selectedBookingForDiscount?.customer_phone}
+                </Typography>
+              </div>
+            </div>
+
+            <div className={`p-3 rounded-lg border ${isRtl ? 'text-right' : ''}`}>
+              <Typography variant='caption' color='text.secondary' className='block mb-1'>
+                {dictionary?.bookings?.currentDiscount || 'Current Discount'}
+              </Typography>
+              <Typography variant='h6' color='error.main'>
+                {isRtl ? toArabicDigits(Number(selectedBookingForDiscount?.discount || 0).toFixed(2)) : Number(selectedBookingForDiscount?.discount || 0).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+              </Typography>
+            </div>
+
+            <CustomTextField
+              type="number"
+              label={dictionary?.bookings?.newDiscount || 'New Discount'}
+              value={newDiscount}
+              onChange={e => setNewDiscount(Number(e.target.value))}
+              fullWidth
+              helperText={dictionary?.bookings?.discountHelperText || 'Discount amount in EGP (not percentage)'}
+              InputProps={{
+                startAdornment: isRtl ? undefined : <InputAdornment position="start">{dictionary?.common?.currency || 'EGP'}</InputAdornment>,
+                endAdornment: isRtl ? <InputAdornment position="end">{dictionary?.common?.currency || 'EGP'}</InputAdornment> : undefined,
+                inputProps: { min: 0, step: 0.01 }
+              }}
+            />
+          </div>
+        </DialogContent>
+        <DialogActions className={isRtl ? 'flex-row-reverse justify-start gap-3' : 'gap-3'}>
+          <Button onClick={() => setUpdateDiscountDialogOpen(false)} disabled={isSubmitting}>
+            {dictionary?.common?.cancel || 'Cancel'}
+          </Button>
+          <Button
+            variant='contained'
+            color='warning'
+            onClick={handleUpdateDiscount}
+            disabled={isSubmitting}
+            startIcon={isSubmitting ? <CircularProgress size={20} /> : <i className='tabler-discount-check' />}
+          >
+            {dictionary?.common?.update || 'Update'}
           </Button>
         </DialogActions>
       </Dialog>

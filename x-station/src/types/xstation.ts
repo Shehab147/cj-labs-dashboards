@@ -139,6 +139,8 @@ export interface Booking {
   current_duration_hours?: number
   estimated_price?: number
   remaining_hours?: number
+  discount?: number
+  is_multi?: number
 }
 
 export interface ActiveBooking extends Booking {

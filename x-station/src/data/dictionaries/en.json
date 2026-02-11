@@ -253,7 +253,19 @@
     "notStarted": "Not Started",
     "roomCost": "Room Cost",
     "roomDuration": "Room Duration",
-    "noRecentBookings": "No recent bookings"
+    "noRecentBookings": "No recent bookings",
+    "bookingType": "Booking Type",
+    "single": "Single Player",
+    "multi": "Multi Player",
+    "discount": "Discount",
+    "discountHelperText": "Discount amount in EGP (not percentage)",
+    "updateDiscount": "Update Discount",
+    "currentDiscount": "Current Discount",
+    "newDiscount": "New Discount",
+    "discountUpdated": "Discount updated successfully",
+    "deleteBooking": "Delete Booking",
+    "confirmDelete": "Are you sure you want to delete this booking? This action cannot be undone.",
+    "bookingDeleted": "Booking deleted successfully"
   },
   "customers": {
     "title": "Customers",
@@ -379,7 +391,12 @@
     "receipt": "Receipt",
     "thankYou": "Thank you for your order!",
     "printReceipt": "Print Receipt",
-    "viewOrder": "View Order"
+    "viewOrder": "View Order",
+    "clearAll": "Clear All",
+    "deleteAllItems": "Delete All Items",
+    "updateOrder": "Update Order",
+    "existing": "Existing",
+    "allItemsCleared": "All items cleared. Click Delete All Items to confirm."
   },
   "analytics": {
     "title": "Analytics",
