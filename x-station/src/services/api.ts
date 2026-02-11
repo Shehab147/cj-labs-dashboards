@@ -384,6 +384,9 @@ export const analyticsApi = {
   getStaff: (period?: string) => 
     apiCall('getFullStaffAnalytics', period ? { period } : undefined),
   
+  getAdminPerformance: (startDate?: string, endDate?: string) =>
+    apiCall('getAdminPerformanceAnalytics', { start_date: startDate, end_date: endDate }),
+  
   getFullOrders: (startDate?: string, endDate?: string, exportData?: boolean) =>
     apiCall('getFullOrdersAnalytics', { start_date: startDate, end_date: endDate, export: exportData }),
   

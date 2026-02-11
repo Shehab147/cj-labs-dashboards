@@ -1120,7 +1120,7 @@ ${ordersHtml}
         <Card>
           <CardContent>
             {displayBookings.length > 0 ? (
-              <div className='overflow-x-auto'>
+              <div className='overflow-x-auto pb-2'>
                 <table className='w-full' dir={isRtl ? 'rtl' : 'ltr'}>
                   <thead>
                     <tr className='border-b'>
@@ -1514,7 +1514,7 @@ ${ordersHtml}
               }
               
               return (
-                <div className='overflow-x-auto'>
+                <div className='overflow-x-auto pb-2'>
                   <table className='w-full' dir={isRtl ? 'rtl' : 'ltr'}>
                     <thead>
                       <tr className='border-b'>
@@ -1632,6 +1632,13 @@ ${ordersHtml}
               onChange={e => setNewBooking({ ...newBooking, duration_minutes: Number(e.target.value) })}
               fullWidth
               helperText={dictionary?.bookings?.durationHelperText || 'Select a timer or leave open-ended'}
+              SelectProps={{
+                MenuProps: {
+                  PaperProps: {
+                    style: { maxHeight: 250 }
+                  }
+                }
+              }}
             >
               <MenuItem value={0}>
                 <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -1670,12 +1677,32 @@ ${ordersHtml}
               fullWidth
               required
               helperText={dictionary?.bookings?.onlyAvailableRooms || 'Only currently available rooms'}
+              SelectProps={{
+                MenuProps: {
+                  PaperProps: {
+                    style: { maxHeight: 250 }
+                  }
+                }
+              }}
             >
-              {availableRooms.map(room => (
-                <MenuItem key={room.id} value={room.id}>
-                  {room.name} - {room.ps} ({isRtl ? toArabicDigits(room.hour_cost.toString()) : room.hour_cost} {dictionary?.common?.currencyPerHour || 'EGP/hr'})
-                </MenuItem>
-              ))}
+              {availableRooms.map(room => {
+                const hourCost = isRtl ? toArabicDigits(room.hour_cost.toString()) : room.hour_cost
+                const multiCost = room.multi_hour_cost && Number(room.multi_hour_cost) > 0 
+                  ? (isRtl ? toArabicDigits(room.multi_hour_cost.toString()) : room.multi_hour_cost) 
+                  : null
+                const currency = dictionary?.common?.currency || 'EGP'
+                const singleLabel = dictionary?.bookings?.single || 'Single'
+                const multiLabel = dictionary?.bookings?.multi || 'Multi'
+                const priceInfo = multiCost 
+                  ? `${singleLabel}: ${hourCost} | ${multiLabel}: ${multiCost} ${currency}`
+                  : `${singleLabel}: ${hourCost} ${currency}`
+                
+                return (
+                  <MenuItem key={room.id} value={room.id}>
+                    {`${room.name} - ${room.ps} (${priceInfo})`}
+                  </MenuItem>
+                )
+              })}
             </CustomTextField>
 
             <Autocomplete

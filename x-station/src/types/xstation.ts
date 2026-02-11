@@ -466,6 +466,67 @@ export interface StaffAnalytics {
   }>
 }
 
+// Admin Performance Analytics with shifts and income
+export interface AdminPerformanceShift {
+  id: number
+  admin_id: number
+  admin_name: string
+  started_at: string
+  ended_at: string | null
+  total_revenue: number
+  total_orders: number
+  total_bookings: number
+  total_discount: number
+  duration_hours: number
+  opening_cash: number
+  closing_cash: number
+  cash_difference: number
+}
+
+export interface AdminPerformanceData {
+  id: number
+  name: string
+  email: string
+  role: string
+  status: string
+  days_present: number
+  total_sessions: number
+  shifts: AdminPerformanceShift[]
+  total_shifts: number
+  total_revenue: number
+  total_orders: number
+  total_bookings: number
+  total_hours: number
+  avg_revenue_per_shift: number
+  avg_hours_per_shift?: number
+}
+
+export interface AdminPerformanceAnalytics {
+  date_range: DateRange
+  summary: {
+    total_admins: number
+    active_admins: number
+    total_shifts: number
+    total_revenue: number
+    total_hours: number
+    total_orders: number
+    total_bookings: number
+    avg_revenue_per_shift: number
+    avg_revenue_per_admin: number
+  }
+  admins: AdminPerformanceData[]
+  all_shifts: AdminPerformanceShift[]
+  daily_performance: Array<{
+    date: string
+    day_name: string
+    shift_count: number
+    revenue: number
+    orders: number
+    bookings: number
+    hours: number
+  }>
+}
+
 export interface RevenueAnalytics {
   date_range?: DateRange
   summary?: {

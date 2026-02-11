@@ -1567,9 +1567,16 @@ ${ordersHtml}
               onChange={e => setBookingData({ ...bookingData, duration_minutes: Number(e.target.value) })}
               fullWidth
               helperText={dictionary?.bookings?.durationHelperText || 'Select a timer or leave open-ended'}
+              SelectProps={{
+                MenuProps: {
+                  PaperProps: {
+                    style: { maxHeight: 250 }
+                  }
+                }
+              }}
             >
               <MenuItem value={0}>
-                <div className='flex items-center gap-2'>
+                <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <i className='tabler-infinity' />
                   {dictionary?.bookings?.openEnded || 'Open-ended (no timer)'}
                 </div>
@@ -1580,15 +1587,15 @@ ${ordersHtml}
                 const mins = minutes % 60
                 let label = ''
                 if (hours === 0) {
-                  label = `${minutes} ${dictionary?.common?.minutes || 'minutes'}`
+                  label = `${isRtl ? toArabicDigits(minutes.toString()) : minutes} ${dictionary?.common?.minutes || 'minutes'}`
                 } else if (mins === 0) {
-                  label = `${hours} ${hours === 1 ? dictionary?.common?.hour || 'hour' : dictionary?.common?.hours || 'hours'}`
+                  label = `${isRtl ? toArabicDigits(hours.toString()) : hours} ${hours === 1 ? dictionary?.common?.hour || 'hour' : dictionary?.common?.hours || 'hours'}`
                 } else {
-                  label = `${hours}:${mins.toString().padStart(2, '0')} ${dictionary?.common?.hours || 'hours'}`
+                  label = `${isRtl ? toArabicDigits(hours.toString()) : hours}:${isRtl ? toArabicDigits(mins.toString().padStart(2, '0')) : mins.toString().padStart(2, '0')} ${dictionary?.common?.hours || 'hours'}`
                 }
                 return (
                   <MenuItem key={minutes} value={minutes}>
-                    <div className='flex items-center gap-2'>
+                    <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                       <i className='tabler-clock' />
                       {label}
                     </div>
@@ -1605,12 +1612,32 @@ ${ordersHtml}
               fullWidth
               required
               helperText={dictionary?.bookings?.onlyAvailableRooms || 'Only currently available rooms'}
+              SelectProps={{
+                MenuProps: {
+                  PaperProps: {
+                    style: { maxHeight: 250 }
+                  }
+                }
+              }}
             >
-              {availableRooms.map(room => (
-                <MenuItem key={room.id} value={room.id}>
-                  {room.name} - {room.ps} ({room.hour_cost} {dictionary?.common?.currencyPerHour || 'EGP/hr'})
-                </MenuItem>
-              ))}
+              {availableRooms.map(room => {
+                const hourCost = isRtl ? toArabicDigits(room.hour_cost.toString()) : room.hour_cost
+                const multiCost = room.multi_hour_cost && Number(room.multi_hour_cost) > 0 
+                  ? (isRtl ? toArabicDigits(room.multi_hour_cost.toString()) : room.multi_hour_cost) 
+                  : null
+                const currency = dictionary?.common?.currency || 'EGP'
+                const singleLabel = dictionary?.bookings?.single || 'Single'
+                const multiLabel = dictionary?.bookings?.multi || 'Multi'
+                const priceInfo = multiCost 
+                  ? `${singleLabel}: ${hourCost} | ${multiLabel}: ${multiCost} ${currency}`
+                  : `${singleLabel}: ${hourCost} ${currency}`
+                
+                return (
+                  <MenuItem key={room.id} value={room.id}>
+                    {`${room.name} - ${room.ps} (${priceInfo})`}
+                  </MenuItem>
+                )
+              })}
             </CustomTextField>
             
             {!showInlineCustomerForm ? (

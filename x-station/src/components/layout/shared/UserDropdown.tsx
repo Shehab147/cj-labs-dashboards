@@ -56,7 +56,8 @@ const UserDropdown = () => {
   // States
   const [open, setOpen] = useState(false)
   const [admin, setAdmin] = useState<any>(null)
-  const [endingShift, setEndingShift] = useState(false)
+  const [shiftLoading, setShiftLoading] = useState(false)
+  const [hasActiveShift, setHasActiveShift] = useState(true) // Default to true to show End Shift initially
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -72,6 +73,21 @@ const UserDropdown = () => {
   useEffect(() => {
     const adminData = getStoredAdmin()
     setAdmin(adminData)
+  }, [])
+
+  // Check for active shift on mount
+  useEffect(() => {
+    const checkActiveShift = async () => {
+      try {
+        const response = await shiftApi.getCurrent()
+        if (response.status === 'success') {
+          setHasActiveShift(response.data?.has_active_shift ?? false)
+        }
+      } catch (error) {
+        console.error('Failed to check active shift:', error)
+      }
+    }
+    checkActiveShift()
   }, [])
 
   // Use admin data from localStorage or fallback to session
@@ -98,21 +114,35 @@ const UserDropdown = () => {
   // Get logout from auth context
   const { logout } = useAuth()
 
-  const handleEndShift = async () => {
+  const handleShiftToggle = async () => {
     try {
-      setEndingShift(true)
-      const response = await shiftApi.end({})
-      if (response.status === 'success') {
-        showSuccess('Shift ended successfully - تم إنهاء الوردية بنجاح')
-        setOpen(false)
+      setShiftLoading(true)
+      if (hasActiveShift) {
+        // End shift
+        const response = await shiftApi.end({})
+        if (response.status === 'success') {
+          showSuccess('Shift ended successfully - تم إنهاء الوردية بنجاح')
+          setHasActiveShift(false)
+          setOpen(false)
+        } else {
+          showError(response.message || 'Failed to end shift - فشل إنهاء الوردية')
+        }
       } else {
-        showError(response.message || 'Failed to end shift - فشل إنهاء الوردية')
+        // Start shift
+        const response = await shiftApi.start({})
+        if (response.status === 'success') {
+          showSuccess('Shift started successfully - تم بدء الوردية بنجاح')
+          setHasActiveShift(true)
+          setOpen(false)
+        } else {
+          showError(response.message || 'Failed to start shift - فشل بدء الوردية')
+        }
       }
     } catch (error) {
-      console.error('End shift error:', error)
-      showError('Failed to end shift - فشل إنهاء الوردية')
+      console.error('Shift toggle error:', error)
+      showError(hasActiveShift ? 'Failed to end shift - فشل إنهاء الوردية' : 'Failed to start shift - فشل بدء الوردية')
     } finally {
-      setEndingShift(false)
+      setShiftLoading(false)
     }
   }
 
@@ -174,20 +204,24 @@ const UserDropdown = () => {
                     <i className='tabler-user' />
                     <Typography color='text.primary'>My Profile</Typography>
                   </MenuItem>
-                  <div className='flex items-center plb-2 pli-3'>
-                    <Button
-                      fullWidth
-                      variant='outlined'
-                      color='warning'
-                      size='small'
-                      disabled={endingShift}
-                      endIcon={<i className='tabler-clock-stop' />}
-                      onClick={handleEndShift}
-                      sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
-                    >
-                      {endingShift ? 'Ending...' : 'End Shift - إنهاء الوردية'}
-                    </Button>
-                  </div>
+                  {admin?.role !== 'superadmin' && (
+                    <div className='flex items-center plb-2 pli-3'>
+                      <Button
+                        fullWidth
+                        variant='outlined'
+                        color={hasActiveShift ? 'warning' : 'success'}
+                        size='small'
+                        disabled={shiftLoading}
+                        endIcon={<i className={hasActiveShift ? 'tabler-clock-stop' : 'tabler-clock-play'} />}
+                        onClick={handleShiftToggle}
+                        sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
+                      >
+                        {shiftLoading 
+                          ? (hasActiveShift ? 'Ending...' : 'Starting...') 
+                          : (hasActiveShift ? 'End Shift - إنهاء الوردية' : 'Start Shift - بدء الوردية')}
+                      </Button>
+                    </div>
+                  )}
                   <div className='flex items-center plb-2 pli-3'>
                     <Button
                       fullWidth

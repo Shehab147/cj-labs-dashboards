@@ -87,13 +87,10 @@ if ($admin['role'] == 'superadmin') {
             'sessions' => $sessions
         ]);
     }
-    // Start shift and get result
-    $shiftResult = startShift($admin, false); // false = don't respond, return data
-    
+    // Start shift and get result    
     respond('success', [
         'token' => $token, 
         'admin' => $admin,
-        'shift' => $shiftResult
     ]);
 }
 function logout(){
@@ -3561,6 +3558,192 @@ function getFullStaffAnalytics(){
     if($export){
         $data['staff_export'] = $allStaff;
     }
+    
+    respond('success', $data);
+}
+
+/**
+ * Admin Performance Analytics with shifts, income, and attendance
+ * Params: start_date (optional), end_date (optional)
+ * Returns detailed performance data for each admin including their shifts and income
+ */
+function getAdminPerformanceAnalytics(){
+    global $conn;
+    $admin = getAdmin();
+    
+    if($admin['role'] != 'superadmin'){
+        respond('error', 'Unauthorized. Only superadmin can view analytics.');
+    }
+    
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    $startDate = isset($input['start_date']) ? $input['start_date'] : null;
+    $endDate = isset($input['end_date']) ? $input['end_date'] : null;
+    
+    // Build date filters for shifts and sessions
+    $shiftDateFilter = "";
+    $sessionDateFilter = "";
+    if($startDate && $endDate){
+        $shiftDateFilter = " AND DATE(sh.started_at) BETWEEN '$startDate' AND '$endDate'";
+        $sessionDateFilter = " AND DATE(s.created_at) BETWEEN '$startDate' AND '$endDate'";
+    } elseif($startDate){
+        $shiftDateFilter = " AND DATE(sh.started_at) >= '$startDate'";
+        $sessionDateFilter = " AND DATE(s.created_at) >= '$startDate'";
+    } elseif($endDate){
+        $shiftDateFilter = " AND DATE(sh.started_at) <= '$endDate'";
+        $sessionDateFilter = " AND DATE(s.created_at) <= '$endDate'";
+    }
+    
+    // Get all admins (non-superadmin) with their shift performance
+    $adminsResult = $conn->query("
+        SELECT 
+            a.id, a.name, a.email, a.role, a.status,
+            COUNT(DISTINCT DATE(s.created_at)) as days_present,
+            COUNT(s.id) as total_sessions
+        FROM admins a
+        LEFT JOIN session s ON a.id = s.admin_id " . ($sessionDateFilter ? "AND 1=1 $sessionDateFilter" : "") . "
+        WHERE a.role != 'superadmin'
+        GROUP BY a.id
+        ORDER BY a.name ASC
+    ");
+    
+    $admins = [];
+    while($row = $adminsResult->fetch_assoc()){
+        $admins[$row['id']] = $row;
+        $admins[$row['id']]['shifts'] = [];
+        $admins[$row['id']]['total_shifts'] = 0;
+        $admins[$row['id']]['total_revenue'] = 0;
+        $admins[$row['id']]['total_orders'] = 0;
+        $admins[$row['id']]['total_bookings'] = 0;
+        $admins[$row['id']]['total_hours'] = 0;
+        $admins[$row['id']]['avg_revenue_per_shift'] = 0;
+    }
+    
+    // Get shifts with performance data
+    $shiftsResult = $conn->query("
+        SELECT 
+            sh.*,
+            a.name as admin_name,
+            a.email as admin_email
+        FROM shifts sh
+        JOIN admins a ON sh.admin_id = a.id
+        WHERE a.role != 'superadmin' 
+        AND sh.status = 'completed'
+        $shiftDateFilter
+        ORDER BY sh.started_at DESC
+    ");
+    
+    $allShifts = [];
+    while($row = $shiftsResult->fetch_assoc()){
+        $shift = [
+            'id' => (int)$row['id'],
+            'admin_id' => (int)$row['admin_id'],
+            'admin_name' => $row['admin_name'],
+            'started_at' => $row['started_at'],
+            'ended_at' => $row['ended_at'],
+            'total_revenue' => (float)$row['total_revenue'],
+            'total_orders' => (int)$row['total_orders'],
+            'total_bookings' => (int)$row['total_bookings'],
+            'total_discount' => (float)$row['total_discount'],
+            'duration_hours' => (float)$row['duration_hours'],
+            'opening_cash' => (float)$row['opening_cash'],
+            'closing_cash' => (float)$row['closing_cash'],
+            'cash_difference' => (float)$row['cash_difference']
+        ];
+        
+        $allShifts[] = $shift;
+        
+        // Aggregate to admin
+        if(isset($admins[$row['admin_id']])){
+            $admins[$row['admin_id']]['shifts'][] = $shift;
+            $admins[$row['admin_id']]['total_shifts']++;
+            $admins[$row['admin_id']]['total_revenue'] += (float)$row['total_revenue'];
+            $admins[$row['admin_id']]['total_orders'] += (int)$row['total_orders'];
+            $admins[$row['admin_id']]['total_bookings'] += (int)$row['total_bookings'];
+            $admins[$row['admin_id']]['total_hours'] += (float)$row['duration_hours'];
+        }
+    }
+    
+    // Calculate averages and format admins array
+    $adminsArray = [];
+    $totalRevenue = 0;
+    $totalShifts = 0;
+    $totalHours = 0;
+    $totalOrders = 0;
+    $totalBookings = 0;
+    
+    foreach($admins as $adminId => $adminData){
+        if($adminData['total_shifts'] > 0){
+            $adminData['avg_revenue_per_shift'] = round($adminData['total_revenue'] / $adminData['total_shifts'], 2);
+            $adminData['avg_hours_per_shift'] = round($adminData['total_hours'] / $adminData['total_shifts'], 2);
+        }
+        $adminData['total_revenue'] = round($adminData['total_revenue'], 2);
+        $adminData['total_hours'] = round($adminData['total_hours'], 2);
+        
+        $adminsArray[] = $adminData;
+        
+        $totalRevenue += $adminData['total_revenue'];
+        $totalShifts += $adminData['total_shifts'];
+        $totalHours += $adminData['total_hours'];
+        $totalOrders += $adminData['total_orders'];
+        $totalBookings += $adminData['total_bookings'];
+    }
+    
+    // Sort admins by total revenue descending
+    usort($adminsArray, function($a, $b) {
+        return $b['total_revenue'] <=> $a['total_revenue'];
+    });
+    
+    // Daily performance breakdown
+    $dailyPerformanceResult = $conn->query("
+        SELECT 
+            DATE(sh.started_at) as date,
+            DAYNAME(sh.started_at) as day_name,
+            COUNT(sh.id) as shift_count,
+            SUM(sh.total_revenue) as revenue,
+            SUM(sh.total_orders) as orders,
+            SUM(sh.total_bookings) as bookings,
+            SUM(sh.duration_hours) as hours
+        FROM shifts sh
+        JOIN admins a ON sh.admin_id = a.id
+        WHERE a.role != 'superadmin' 
+        AND sh.status = 'completed'
+        $shiftDateFilter
+        GROUP BY DATE(sh.started_at)
+        ORDER BY date ASC
+    ");
+    $dailyPerformance = [];
+    while($row = $dailyPerformanceResult->fetch_assoc()){
+        $dailyPerformance[] = [
+            'date' => $row['date'],
+            'day_name' => $row['day_name'],
+            'shift_count' => (int)$row['shift_count'],
+            'revenue' => round((float)$row['revenue'], 2),
+            'orders' => (int)$row['orders'],
+            'bookings' => (int)$row['bookings'],
+            'hours' => round((float)$row['hours'], 2)
+        ];
+    }
+    
+    $data = [
+        'date_range' => [
+            'start_date' => $startDate ?? 'all time',
+            'end_date' => $endDate ?? 'all time'
+        ],
+        'summary' => [
+            'total_admins' => count($adminsArray),
+            'active_admins' => count(array_filter($adminsArray, fn($a) => $a['status'] == 'active')),
+            'total_shifts' => $totalShifts,
+            'total_revenue' => round($totalRevenue, 2),
+            'total_hours' => round($totalHours, 2),
+            'total_orders' => $totalOrders,
+            'total_bookings' => $totalBookings,
+            'avg_revenue_per_shift' => $totalShifts > 0 ? round($totalRevenue / $totalShifts, 2) : 0,
+            'avg_revenue_per_admin' => count($adminsArray) > 0 ? round($totalRevenue / count($adminsArray), 2) : 0
+        ],
+        'admins' => $adminsArray,
+        'all_shifts' => $allShifts,
+        'daily_performance' => $dailyPerformance
+    ];
     
     respond('success', $data);
 }

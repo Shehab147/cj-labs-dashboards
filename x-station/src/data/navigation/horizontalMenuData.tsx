@@ -101,6 +101,10 @@ const horizontalMenuData = (
           {
             label: dictionary['navigation'].cafeteriaAnalytics,
             href: '/analytics/cafeteria'
+          },
+          {
+            label: dictionary['navigation'].staffAnalytics,
+            href: '/analytics/staff'
           }
         ]
       },
