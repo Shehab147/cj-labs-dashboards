@@ -557,6 +557,24 @@
   "timers": {
     "noActiveTimers": "No active timers"
   },
+  "roomsAnalysis": {
+    "title": "Rooms Analysis",
+    "subtitle": "Detailed analysis of room bookings and performance",
+    "totalBookings": "Total Bookings",
+    "totalRevenue": "Total Revenue",
+    "totalHours": "Total Hours",
+    "avgDuration": "Avg Duration",
+    "uniqueCustomers": "Unique Customers",
+    "roomPerformance": "Room Performance",
+    "allBookings": "All Bookings",
+    "dailyBreakdown": "Daily Breakdown",
+    "viewBookings": "View Bookings",
+    "topCustomers": "Top Customers",
+    "weekdayAnalysis": "Weekday Analysis",
+    "performance": "Performance",
+    "filterByRoom": "Filter by Room",
+    "allRooms": "All Rooms"
+  },
   "shifts": {
     "dailyIncomeAnalysis": "Daily Income Analysis",
     "totalRevenue": "Total Revenue",

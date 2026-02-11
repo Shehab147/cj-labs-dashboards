@@ -22,6 +22,12 @@ import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import Box from '@mui/material/Box'
 import Autocomplete from '@mui/material/Autocomplete'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import FormControl from '@mui/material/FormControl'
+import FormLabel from '@mui/material/FormLabel'
+import InputAdornment from '@mui/material/InputAdornment'
 
 import { frontDeskApi, roomApi, bookingApi, customerApi, cafeteriaApi, orderApi } from '@/services/api'
 import type { FrontDeskDashboard, Room, Customer, CafeteriaItem, ActiveBooking } from '@/types/xstation'
@@ -47,6 +53,8 @@ interface QuickBookingData {
   customer_phone: string
   customer_name: string
   duration_minutes: number // 0 = open-ended, 10-180 minutes
+  is_multi: number // 0 = single, 1 = multi
+  discount: number // discount in EGP
 }
 
 interface OrderItemData {
@@ -90,7 +98,9 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
     room_id: 0,
     customer_phone: '',
     customer_name: '',
-    duration_minutes: 0 // 0 = open-ended
+    duration_minutes: 0, // 0 = open-ended
+    is_multi: 0, // 0 = single, 1 = multi
+    discount: 0 // discount in EGP
   })
   
   // Default Guest customer
@@ -374,6 +384,8 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
         room_id: bookingData.room_id,
         customer_phone: selectedBookingCustomer.phone,
         customer_name: selectedBookingCustomer.name || undefined,
+        is_multi: bookingData.is_multi,
+        discount: bookingData.discount,
         ...(startedAt && { started_at: startedAt }),
         ...(finishedAt && { finished_at: finishedAt })
       })
@@ -381,7 +393,7 @@ const FrontDesk = ({ dictionary }: FrontDeskProps) => {
       if (response.status === 'success') {
         setSuccessMessage(dictionary?.bookings?.bookingStarted || 'Booking started successfully')
         setBookingDialogOpen(false)
-        setBookingData({ room_id: 0, customer_phone: '', customer_name: '', duration_minutes: 0 })
+        setBookingData({ room_id: 0, customer_phone: '', customer_name: '', duration_minutes: 0, is_multi: 0, discount: 0 })
         setSelectedBookingCustomer(guestCustomer)
         fetchData()
       } else {
@@ -1569,6 +1581,41 @@ ${ordersHtml}
                 </CardContent>
               </Card>
             )}
+
+            <FormControl component="fieldset">
+              <FormLabel component="legend">
+                {dictionary?.bookings?.bookingType || 'Booking Type'}
+              </FormLabel>
+              <RadioGroup
+                row
+                value={bookingData.is_multi}
+                onChange={e => setBookingData({ ...bookingData, is_multi: Number(e.target.value) })}
+              >
+                <FormControlLabel
+                  value={0}
+                  control={<Radio />}
+                  label={dictionary?.bookings?.single || 'Single Player'}
+                />
+                <FormControlLabel
+                  value={1}
+                  control={<Radio />}
+                  label={dictionary?.bookings?.multi || 'Multi Player'}
+                />
+              </RadioGroup>
+            </FormControl>
+
+            <CustomTextField
+              type="number"
+              label={dictionary?.bookings?.discount || 'Discount'}
+              value={bookingData.discount}
+              onChange={e => setBookingData({ ...bookingData, discount: Number(e.target.value) })}
+              fullWidth
+              helperText={dictionary?.bookings?.discountHelperText || 'Discount amount in EGP (not percentage)'}
+              InputProps={{
+                startAdornment: <InputAdornment position="start">{dictionary?.common?.currency || 'EGP'}</InputAdornment>,
+                inputProps: { min: 0, step: 0.01 }
+              }}
+            />
           </div>
         </DialogContent>
         <DialogActions>

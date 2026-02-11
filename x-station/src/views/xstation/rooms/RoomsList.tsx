@@ -53,6 +53,7 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
     name: '',
     ps: 'PS5',
     hour_cost: '',
+    multi_hour_cost: '',
     capacity: ''
   })
 
@@ -90,6 +91,7 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
         name: room.name,
         ps: room.ps,
         hour_cost: String(room.hour_cost),
+        multi_hour_cost: String(room.multi_hour_cost || ''),
         capacity: String(room.capacity)
       })
     } else {
@@ -98,6 +100,7 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
         name: '',
         ps: 'PS5',
         hour_cost: '',
+        multi_hour_cost: '',
         capacity: ''
       })
     }
@@ -111,6 +114,7 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
       name: '',
       ps: 'PS5',
       hour_cost: '',
+      multi_hour_cost: '',
       capacity: ''
     })
   }
@@ -123,6 +127,7 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
         name: formData.name,
         ps: formData.ps,
         hour_cost: parseFloat(formData.hour_cost),
+        multi_hour_cost: parseFloat(formData.multi_hour_cost || '0'),
         capacity: parseInt(formData.capacity)
       }
 
@@ -230,6 +235,7 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
                     <TableCell>{dictionary?.rooms?.roomName || 'Room Name'}</TableCell>
                     <TableCell>{dictionary?.rooms?.console || 'Console'}</TableCell>
                     <TableCell>{dictionary?.rooms?.hourlyRate || 'Hourly Rate'}</TableCell>
+                    <TableCell>{dictionary?.rooms?.multiHourRate || 'Multi-Hour Rate'}</TableCell>
                     <TableCell>{dictionary?.rooms?.capacity || 'Capacity'}</TableCell>
                     <TableCell>{dictionary?.rooms?.status || 'Status'}</TableCell>
                     {isSuperadmin && <TableCell>{dictionary?.common?.actions || 'Actions'}</TableCell>}
@@ -252,6 +258,9 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
                         </TableCell>
                         <TableCell>
                           <Typography variant='body2'>{room.hour_cost} {dictionary?.common?.currency || 'EGP'}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant='body2'>{room.multi_hour_cost || 0} {dictionary?.common?.currency || 'EGP'}</Typography>
                         </TableCell>
                         <TableCell>
                           <Typography variant='body2'>{room.capacity}</Typography>
@@ -292,7 +301,7 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className='text-center py-8'>
+                      <TableCell colSpan={7} className='text-center py-8'>
                         <Typography color='text.secondary'>
                           {dictionary?.common?.noData || 'No data available'}
                         </Typography>
@@ -340,6 +349,14 @@ const RoomsList = ({ dictionary }: RoomsListProps) => {
               type='number'
               fullWidth
               required
+            />
+            <CustomTextField
+              label={`${dictionary?.rooms?.multiHourRate || 'Multi-Hour Rate'} (${dictionary?.common?.currency || 'EGP'})`}
+              value={formData.multi_hour_cost}
+              onChange={e => setFormData({ ...formData, multi_hour_cost: e.target.value })}
+              type='number'
+              fullWidth
+              placeholder='0'
             />
             <CustomTextField
               label={dictionary?.rooms?.capacity || 'Capacity'}

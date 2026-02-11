@@ -34,10 +34,13 @@ import { useSettings } from '@core/hooks/useSettings'
 import { getLocalizedUrl } from '@/utils/i18n'
 
 // Service Imports
-import { getStoredAdmin } from '@/services/api'
+import { getStoredAdmin, shiftApi } from '@/services/api'
 
 // Context Imports
 import { useAuth } from '@/contexts/authContext'
+
+// Notification hook
+import { useNotification } from '@/hooks/useNotification'
 
 // Styled component for badge content
 const BadgeContentSpan = styled('span')({
@@ -53,6 +56,7 @@ const UserDropdown = () => {
   // States
   const [open, setOpen] = useState(false)
   const [admin, setAdmin] = useState<any>(null)
+  const [endingShift, setEndingShift] = useState(false)
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -62,6 +66,7 @@ const UserDropdown = () => {
   const { data: session } = useSession()
   const { settings } = useSettings()
   const { lang: locale } = useParams()
+  const { showSuccess, showError } = useNotification()
 
   // Get admin data from localStorage
   useEffect(() => {
@@ -92,6 +97,24 @@ const UserDropdown = () => {
 
   // Get logout from auth context
   const { logout } = useAuth()
+
+  const handleEndShift = async () => {
+    try {
+      setEndingShift(true)
+      const response = await shiftApi.end({})
+      if (response.success) {
+        showSuccess('Shift ended successfully - تم إنهاء الوردية بنجاح')
+        setOpen(false)
+      } else {
+        showError(response.message || 'Failed to end shift - فشل إنهاء الوردية')
+      }
+    } catch (error) {
+      console.error('End shift error:', error)
+      showError('Failed to end shift - فشل إنهاء الوردية')
+    } finally {
+      setEndingShift(false)
+    }
+  }
 
   const handleUserLogout = async () => {
     try {
@@ -151,6 +174,20 @@ const UserDropdown = () => {
                     <i className='tabler-user' />
                     <Typography color='text.primary'>My Profile</Typography>
                   </MenuItem>
+                  <div className='flex items-center plb-2 pli-3'>
+                    <Button
+                      fullWidth
+                      variant='outlined'
+                      color='warning'
+                      size='small'
+                      disabled={endingShift}
+                      endIcon={<i className='tabler-clock-stop' />}
+                      onClick={handleEndShift}
+                      sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
+                    >
+                      {endingShift ? 'Ending...' : 'End Shift - إنهاء الوردية'}
+                    </Button>
+                  </div>
                   <div className='flex items-center plb-2 pli-3'>
                     <Button
                       fullWidth

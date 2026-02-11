@@ -241,7 +241,16 @@ export const bookingApi = {
   
   cancel: (id: number) => apiCall('cancelBooking', { id }),
   
-  quickStart: (data: { room_id: number; customer_phone: string; customer_name?: string; duration_minutes?: number }) =>
+  quickStart: (data: { 
+    room_id: number; 
+    customer_phone: string; 
+    customer_name?: string; 
+    duration_minutes?: number;
+    is_multi?: number;
+    discount?: number;
+    started_at?: string;
+    finished_at?: string;
+  }) =>
     apiCall('quickStartBooking', data),
   
   switchRoom: (bookingId: number, newRoomId: number) =>

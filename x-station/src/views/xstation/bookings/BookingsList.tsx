@@ -28,6 +28,11 @@ import Tab from '@mui/material/Tab'
 import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import FormControl from '@mui/material/FormControl'
+import FormLabel from '@mui/material/FormLabel'
 import CustomTextField from '@core/components/mui/TextField'
 import { useAuth } from '@/contexts/authContext'
 import { i18n } from '@configs/i18n'
@@ -87,7 +92,9 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   const [newBooking, setNewBooking] = useState({
     room_id: 0,
     customer_id: -1, // -1 = Guest (default)
-    duration_minutes: 0 // 0 = open-ended, 30, 60, 90 minutes
+    duration_minutes: 0, // 0 = open-ended, 30, 60, 90 minutes
+    is_multi: 0, // 0 = single, 1 = multi
+    discount: 0 // discount in EGP
   })
   const [newRoomId, setNewRoomId] = useState(0)
 
@@ -383,6 +390,8 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
         room_id: newBooking.room_id,
         customer_phone: customerPhone,
         customer_name: customerName,
+        is_multi: newBooking.is_multi,
+        discount: newBooking.discount,
         ...(startedAt && { started_at: startedAt }),
         ...(finishedAt && { finished_at: finishedAt })
       })
@@ -399,7 +408,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
         
         setSuccessMessage(dictionary?.bookings?.bookingStarted || 'Booking started successfully')
         setStartBookingDialogOpen(false)
-        setNewBooking({ room_id: 0, customer_id: -1, duration_minutes: 0 })
+        setNewBooking({ room_id: 0, customer_id: -1, duration_minutes: 0, is_multi: 0, discount: 0 })
         fetchData()
       } else {
         setError(response.message || dictionary?.errors?.somethingWentWrong)
@@ -1391,6 +1400,45 @@ ${ordersHtml}
                     option.name?.toLowerCase().includes(searchTerm) ||
                     option.phone?.toLowerCase().includes(searchTerm)
                 )
+              }}
+            />
+
+            <FormControl component="fieldset">
+              <FormLabel component="legend" className={isRtl ? 'text-right' : ''}>
+                {dictionary?.bookings?.bookingType || 'Booking Type'}
+              </FormLabel>
+              <RadioGroup
+                row
+                value={newBooking.is_multi}
+                onChange={e => setNewBooking({ ...newBooking, is_multi: Number(e.target.value) })}
+                className={isRtl ? 'flex-row-reverse' : ''}
+              >
+                <FormControlLabel
+                  value={0}
+                  control={<Radio />}
+                  label={dictionary?.bookings?.single || 'Single Player'}
+                  className={isRtl ? 'flex-row-reverse ml-0 mr-4' : ''}
+                />
+                <FormControlLabel
+                  value={1}
+                  control={<Radio />}
+                  label={dictionary?.bookings?.multi || 'Multi Player'}
+                  className={isRtl ? 'flex-row-reverse ml-0' : ''}
+                />
+              </RadioGroup>
+            </FormControl>
+
+            <CustomTextField
+              type="number"
+              label={dictionary?.bookings?.discount || 'Discount'}
+              value={newBooking.discount}
+              onChange={e => setNewBooking({ ...newBooking, discount: Number(e.target.value) })}
+              fullWidth
+              helperText={dictionary?.bookings?.discountHelperText || 'Discount amount in EGP (not percentage)'}
+              InputProps={{
+                startAdornment: isRtl ? undefined : <InputAdornment position="start">{dictionary?.common?.currency || 'EGP'}</InputAdornment>,
+                endAdornment: isRtl ? <InputAdornment position="end">{dictionary?.common?.currency || 'EGP'}</InputAdornment> : undefined,
+                inputProps: { min: 0, step: 0.01 }
               }}
             />
           </div>

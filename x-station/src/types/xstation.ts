@@ -80,6 +80,7 @@ export interface Room {
   name: string
   ps: string
   hour_cost: string | number
+  multi_hour_cost?: string | number
   capacity: number
   is_booked: number | string | boolean
 }

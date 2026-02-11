@@ -577,6 +577,24 @@
   "timers": {
     "noActiveTimers": "لا توجد مؤقتات نشطة"
   },
+  "roomsAnalysis": {
+    "title": "تحليل الغرف",
+    "subtitle": "تحليل مفصل لحجوزات الغرف والأداء",
+    "totalBookings": "إجمالي الحجوزات",
+    "totalRevenue": "إجمالي الإيرادات",
+    "totalHours": "إجمالي الساعات",
+    "avgDuration": "متوسط المدة",
+    "uniqueCustomers": "العملاء الفريدين",
+    "roomPerformance": "أداء الغرف",
+    "allBookings": "جميع الحجوزات",
+    "dailyBreakdown": "التوزيع اليومي",
+    "viewBookings": "عرض الحجوزات",
+    "topCustomers": "أفضل العملاء",
+    "weekdayAnalysis": "تحليل أيام الأسبوع",
+    "performance": "الأداء",
+    "filterByRoom": "تصفية حسب الغرفة",
+    "allRooms": "جميع الغرف"
+  },
   "shifts": {
     "dailyIncomeAnalysis": "تحليل الدخل اليومي",
     "totalRevenue": "إجمالي الإيرادات",
