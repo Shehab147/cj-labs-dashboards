@@ -102,7 +102,7 @@ const UserDropdown = () => {
     try {
       setEndingShift(true)
       const response = await shiftApi.end({})
-      if (response.success) {
+      if (response.status === 'success') {
         showSuccess('Shift ended successfully - تم إنهاء الوردية بنجاح')
         setOpen(false)
       } else {
