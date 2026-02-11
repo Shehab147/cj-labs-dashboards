@@ -226,7 +226,14 @@ export const roomApi = {
 // ==================== ROOM BOOKINGS ====================
 
 export const bookingApi = {
-  add: (data: { customer_id: number; room_id: number; started_at?: string; finished_at?: string }) =>
+  add: (data: { 
+    customer_id?: number; 
+    room_id: number; 
+    started_at?: string; 
+    finished_at?: string;
+    is_multi?: number;
+    discount?: number;
+  }) =>
     apiCall('addBooking', data),
   
   end: (bookingId: number) => apiCall('endBooking', { booking_id: bookingId }),

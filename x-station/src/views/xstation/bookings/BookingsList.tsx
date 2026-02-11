@@ -375,10 +375,6 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
       setIsSubmitting(true)
       const isGuest = newBooking.customer_id === -1 || newBooking.customer_id === 0
       const selectedCustomer = isGuest ? null : customers.find(c => c.id === newBooking.customer_id)
-      
-      // Use selected customer or default "Guest" data
-      const customerName = isGuest ? (dictionary?.bookings?.guestCustomer || 'Guest') : (selectedCustomer?.name || 'Guest')
-      const customerPhone = isGuest ? '0000000000' : (selectedCustomer?.phone || '0000000000')
 
       const durationMinutes = newBooking.duration_minutes
       
@@ -396,11 +392,10 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
         clientEndTime = endTime.getTime()
       }
       
-      // Use quickStart with started_at and finished_at if timed booking
-      const response = await bookingApi.quickStart({
+      // Use addBooking with discount and is_multi support
+      const response = await bookingApi.add({
         room_id: newBooking.room_id,
-        customer_phone: customerPhone,
-        customer_name: customerName,
+        ...(selectedCustomer && { customer_id: selectedCustomer.id }),
         is_multi: newBooking.is_multi,
         discount: newBooking.discount,
         ...(startedAt && { started_at: startedAt }),
@@ -608,8 +603,22 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     setOrderItems([])
   }
 
+  // Get remaining stock for an item (stock - quantity already in order)
+  const getRemainingStock = (itemId: number): number => {
+    const item = availableItems.find(i => i.id === itemId)
+    if (!item) return 0
+    const inOrder = orderItems.find(i => i.item_id === itemId)
+    const quantityInOrder = inOrder ? inOrder.quantity : 0
+    // For existing items, we need to consider the original quantity was already deducted from stock
+    const originalQuantity = inOrder?.original_quantity || 0
+    return Number(item.stock) + originalQuantity - quantityInOrder
+  }
+
   // Add item to order
   const addItemToOrder = (item: CafeteriaItem) => {
+    const remainingStock = getRemainingStock(item.id)
+    if (remainingStock <= 0) return // Don't add if no stock
+    
     const existingItem = orderItems.find(i => i.item_id === item.id)
     if (existingItem) {
       setOrderItems(orderItems.map(i =>
@@ -628,6 +637,12 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     if (quantity <= 0) {
       setOrderItems(orderItems.filter(i => i.item_id !== itemId))
     } else {
+      // Check if increasing and if stock allows
+      const currentItem = orderItems.find(i => i.item_id === itemId)
+      if (currentItem && quantity > currentItem.quantity) {
+        const remainingStock = getRemainingStock(itemId)
+        if (remainingStock <= 0) return // Don't increase if no stock
+      }
       setOrderItems(orderItems.map(i =>
         i.item_id === itemId ? { ...i, quantity } : i
       ))
@@ -1306,6 +1321,17 @@ ${ordersHtml}
                                   <Typography variant='caption' color='text.secondary'>
                                     {dictionary?.bookings?.discount || 'Discount'}
                                   </Typography>
+                                  {(() => {
+                                    const basePrice = isActive 
+                                      ? Number(booking.estimated_price || 0)
+                                      : Number(booking.price || booking.total_price || 0)
+                                    const priceAfterDiscount = Math.max(0, basePrice - Number(booking.discount))
+                                    return (
+                                      <Typography variant='caption' fontWeight={600} color='success.main' sx={{ mt: 0.5 }}>
+                                        {dictionary?.bookings?.afterDiscount || 'After'}: {isRtl ? toArabicDigits(priceAfterDiscount.toFixed(2)) : priceAfterDiscount.toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                                      </Typography>
+                                    )
+                                  })()}
                                 </div>
                               ) : (
                                 <Typography variant='caption' color='text.secondary'>
@@ -1314,23 +1340,33 @@ ${ordersHtml}
                               )}
                             </td>
                             <td className='p-3'>
-                              <div className='flex flex-col gap-0.5'>
-                                <Typography variant='body2' fontWeight={500} color='success.main'>
-                                  {isActive
-                                    ? `~${isRtl ? toArabicDigits(booking.estimated_price?.toFixed(2) || '0') : booking.estimated_price?.toFixed(2)}`
-                                    : (isRtl ? toArabicDigits((booking.price || booking.total_price || 0).toString()) : (booking.price || booking.total_price || 0))} {dictionary?.common?.currency || 'EGP'}
-                                </Typography>
-                                {Number(booking.orders_total) > 0 && (
-                                  <Typography variant='caption' color='text.secondary'>
-                                    + {isRtl ? toArabicDigits(Number(booking.orders_total || 0).toFixed(2)) : Number(booking.orders_total || 0).toFixed(2)} {dictionary?.orders?.cafeteriaOrders || 'cafeteria'}
-                                  </Typography>
-                                )}
-                                {(isActive && Number(booking.orders_total) > 0) && (
-                                  <Typography variant='caption' fontWeight={600} color='primary.main'>
-                                    = {isRtl ? toArabicDigits((Number(booking.estimated_price || 0) + Number(booking.orders_total || 0)).toFixed(2)) : (Number(booking.estimated_price || 0) + Number(booking.orders_total || 0)).toFixed(2)} {dictionary?.common?.total || 'total'}
-                                  </Typography>
-                                )}
-                              </div>
+                              {(() => {
+                                const basePrice = isActive 
+                                  ? Number(booking.estimated_price || 0)
+                                  : Number(booking.price || booking.total_price || 0)
+                                const discount = Number(booking.discount || 0)
+                                const priceAfterDiscount = Math.max(0, basePrice - discount)
+                                const ordersTotal = Number(booking.orders_total || 0)
+                                const finalTotal = priceAfterDiscount + ordersTotal
+                                
+                                return (
+                                  <div className='flex flex-col gap-0.5'>
+                                    <Typography variant='body2' fontWeight={500} color='success.main'>
+                                      {isRtl ? toArabicDigits(priceAfterDiscount.toFixed(2)) : priceAfterDiscount.toFixed(2)} {dictionary?.common?.currency || 'EGP'}
+                                    </Typography>
+                                    {ordersTotal > 0 && (
+                                      <Typography variant='caption' color='info.main'>
+                                        + {isRtl ? toArabicDigits(ordersTotal.toFixed(2)) : ordersTotal.toFixed(2)} {dictionary?.orders?.cafeteriaOrders || 'cafeteria'}
+                                      </Typography>
+                                    )}
+                                    {ordersTotal > 0 && (
+                                      <Typography variant='caption' fontWeight={600} color='primary.main'>
+                                        = {isRtl ? toArabicDigits(finalTotal.toFixed(2)) : finalTotal.toFixed(2)} {dictionary?.common?.total || 'total'}
+                                      </Typography>
+                                    )}
+                                  </div>
+                                )
+                              })()}
                             </td>
                             <td className='p-3'>
                               {isActive && !isPending && !booking.finished_at && (
@@ -1894,28 +1930,33 @@ ${ordersHtml}
                   {orderTab === 0 && (
                     <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto'>
                       {availableItems.length > 0 ? (
-                        availableItems.map(item => (
-                          <Card
-                            key={item.id}
-                            variant='outlined'
-                            className='cursor-pointer hover:border-primary transition-colors'
-                            onClick={() => addItemToOrder(item)}
-                          >
-                            <CardContent className='p-3'>
-                              <Typography variant='body2' fontWeight={500} noWrap>
-                                {item.name}
-                              </Typography>
-                              <div className={`flex justify-between items-center mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                                <Typography variant='caption' color='success.main'>
-                                  {isRtl ? toArabicDigits(String(item.price)) : item.price} {dictionary?.common?.currency || 'EGP'}
+                        availableItems.map(item => {
+                          const remainingStock = getRemainingStock(item.id)
+                          const isOutOfStock = remainingStock <= 0
+                          return (
+                            <Card
+                              key={item.id}
+                              variant='outlined'
+                              className={`transition-colors ${isOutOfStock ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-primary'}`}
+                              onClick={() => !isOutOfStock && addItemToOrder(item)}
+                              sx={isOutOfStock ? { pointerEvents: 'auto' } : {}}
+                            >
+                              <CardContent className='p-3'>
+                                <Typography variant='body2' fontWeight={500} noWrap>
+                                  {item.name}
                                 </Typography>
-                                <Typography variant='caption' color='text.secondary'>
-                                  {isRtl ? toArabicDigits(String(item.stock)) : item.stock} {dictionary?.common?.inStock || 'left'}
-                                </Typography>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))
+                                <div className={`flex justify-between items-center mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                  <Typography variant='caption' color='success.main'>
+                                    {isRtl ? toArabicDigits(String(item.price)) : item.price} {dictionary?.common?.currency || 'EGP'}
+                                  </Typography>
+                                  <Typography variant='caption' color={isOutOfStock ? 'error.main' : 'text.secondary'}>
+                                    {isRtl ? toArabicDigits(String(remainingStock)) : remainingStock} {dictionary?.common?.inStock || 'left'}
+                                  </Typography>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )
+                        })
                       ) : (
                         <div className='col-span-3 text-center py-8'>
                           <CircularProgress size={24} />
@@ -1969,6 +2010,7 @@ ${ordersHtml}
                                 <IconButton
                                   size='small'
                                   onClick={() => updateItemQuantity(item.item_id, item.quantity + 1)}
+                                  disabled={getRemainingStock(item.item_id) <= 0}
                                 >
                                   <i className='tabler-plus text-sm' />
                                 </IconButton>

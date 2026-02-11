@@ -1126,6 +1126,26 @@ function addBooking(){
     $customer_id = isset($input['customer_id']) ? $input['customer_id'] : null;
     $room_id = $input['room_id'];
     
+    // If no customer_id provided, find or create a Guest customer
+    if(!$customer_id || $customer_id <= 0){
+        // Check if Guest customer exists
+        $stmt = $conn->prepare("SELECT id FROM customers WHERE phone = '0000000000' LIMIT 1");
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $guestCustomer = $result->fetch_assoc();
+        $stmt->close();
+        
+        if($guestCustomer){
+            $customer_id = $guestCustomer['id'];
+        } else {
+            // Create Guest customer
+            $stmt = $conn->prepare("INSERT INTO customers (name, phone) VALUES ('Guest', '0000000000')");
+            $stmt->execute();
+            $customer_id = $conn->insert_id;
+            $stmt->close();
+        }
+    }
+    
     // Optional: scheduled start and finish times
     $scheduled_start = isset($input['started_at']) ? $input['started_at'] : null;
     $scheduled_finish = isset($input['finished_at']) ? $input['finished_at'] : null;
@@ -1469,18 +1489,28 @@ function updateBookingDiscount(){
     // Use appropriate hourly cost based on is_multi
     $hour_cost = $is_multi ? (float)$booking['multi_hour_cost'] : (float)$booking['hour_cost'];
     
+    // Check if room is still marked as booked (indicates booking is still active)
+    $stmt = $conn->prepare("SELECT is_booked FROM rooms WHERE id = ?");
+    $stmt->bind_param("i", $booking['room_id']);
+    $stmt->execute();
+    $roomResult = $stmt->get_result();
+    $roomData = $roomResult->fetch_assoc();
+    $stmt->close();
+    $room_is_booked = $roomData ? (int)$roomData['is_booked'] : 0;
+    
     // Check if this is a scheduled booking (has both start and finish times with price > 0)
     $is_scheduled = ($booking['finished_at'] !== null && (float)$booking['price'] > 0);
     $is_completed = false;
     
     if($is_scheduled){
-        // Check if scheduled booking has already ended
-        if($current_time >= $booking['finished_at']){
+        // For scheduled bookings, consider it completed only if room is no longer booked
+        // This allows updating discount even after scheduled time passes, as long as booking wasn't formally ended
+        if($room_is_booked == 0){
             $is_completed = true;
         }
     } else {
-        // For open sessions, check if already ended (finished_at is set)
-        if($booking['finished_at'] !== null){
+        // For open sessions, check if already ended (finished_at is set and room is not booked)
+        if($booking['finished_at'] !== null && $room_is_booked == 0){
             $is_completed = true;
         }
     }
@@ -4984,6 +5014,59 @@ function deleteBooking(){
         respond('error', 'Booking not found.');
     }
     
+    // Get all orders associated with this booking
+    $stmt = $conn->prepare("SELECT id FROM orders WHERE booking_id = ?");
+    $stmt->bind_param("i", $booking_id);
+    $stmt->execute();
+    $ordersResult = $stmt->get_result();
+    $orderIds = [];
+    while($row = $ordersResult->fetch_assoc()){
+        $orderIds[] = $row['id'];
+    }
+    $stmt->close();
+    
+    // Restock items from all orders and delete order_items
+    $restockedItems = [];
+    foreach($orderIds as $order_id){
+        // Get order items
+        $stmt = $conn->prepare("SELECT item_id, quantity FROM order_items WHERE order_id = ?");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $itemsResult = $stmt->get_result();
+        
+        while($item = $itemsResult->fetch_assoc()){
+            $item_id = (int)$item['item_id'];
+            $quantity = (int)$item['quantity'];
+            
+            // Restock the item
+            $updateStmt = $conn->prepare("UPDATE cafeteria_items SET stock = stock + ? WHERE id = ?");
+            $updateStmt->bind_param("ii", $quantity, $item_id);
+            $updateStmt->execute();
+            $updateStmt->close();
+            
+            // Track restocked items
+            if(!isset($restockedItems[$item_id])){
+                $restockedItems[$item_id] = 0;
+            }
+            $restockedItems[$item_id] += $quantity;
+        }
+        $stmt->close();
+        
+        // Delete order items for this order
+        $stmt = $conn->prepare("DELETE FROM order_items WHERE order_id = ?");
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $stmt->close();
+    }
+    
+    // Delete all orders for this booking
+    if(count($orderIds) > 0){
+        $stmt = $conn->prepare("DELETE FROM orders WHERE booking_id = ?");
+        $stmt->bind_param("i", $booking_id);
+        $stmt->execute();
+        $stmt->close();
+    }
+    
     // Delete booking
     $stmt = $conn->prepare("DELETE FROM room_booking WHERE id = ?");
     $stmt->bind_param("i", $booking_id);
@@ -4998,7 +5081,11 @@ function deleteBooking(){
         $stmt->close();
     }
     
-    respond('success', 'Booking deleted successfully.');
+    respond('success', [
+        'message' => 'Booking deleted successfully.',
+        'orders_deleted' => count($orderIds),
+        'items_restocked' => $restockedItems
+    ]);
 }
 /**
  * Get items with stock for ordering (excludes out of stock)
