@@ -396,7 +396,9 @@
     "deleteAllItems": "Delete All Items",
     "updateOrder": "Update Order",
     "existing": "Existing",
-    "allItemsCleared": "All items cleared. Click Delete All Items to confirm."
+    "allItemsCleared": "All items cleared. Click Delete All Items to confirm.",
+    "searchProducts": "Search Products",
+    "searchProductsPlaceholder": "Search by product name..."
   },
   "analytics": {
     "title": "Analytics",

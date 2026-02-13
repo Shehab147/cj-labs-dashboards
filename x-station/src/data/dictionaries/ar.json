@@ -287,7 +287,8 @@
     "discountUpdated": "تم تحديث الخصم بنجاح",
     "deleteBooking": "حذف الحجز",
     "confirmDelete": "هل أنت متأكد من حذف هذا الحجز؟ هذا الإجراء لا يمكن التراجع عنه.",
-    "bookingDeleted": "تم حذف الحجز بنجاح"
+    "bookingDeleted": "تم حذف الحجز بنجاح",
+    "afterDiscount": "بعد الخصم"
   },
   "customers": {
     "title": "العملاء",
@@ -418,7 +419,9 @@
     "deleteAllItems": "حذف جميع العناصر",
     "updateOrder": "تحديث الطلب",
     "existing": "موجود",
-    "allItemsCleared": "تم مسح جميع العناصر. انقر على حذف جميع العناصر للتأكيد."
+    "allItemsCleared": "تم مسح جميع العناصر. انقر على حذف جميع العناصر للتأكيد.",
+    "searchProducts": "البحث عن المنتجات",
+    "searchProductsPlaceholder": "ابحث باسم المنتج..."
   },
   "analytics": {
     "title": "التحليلات",
@@ -606,6 +609,7 @@
     "totalBookings": "إجمالي الحجوزات",
     "totalRevenue": "إجمالي الإيرادات",
     "totalHours": "إجمالي الساعات",
+    "avgBookingValue": "متوسط قيمة الحجز",
     "avgDuration": "متوسط المدة",
     "uniqueCustomers": "العملاء الفريدين",
     "roomPerformance": "أداء الغرف",

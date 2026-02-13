@@ -46,6 +46,16 @@ const DailyIncomeAnalysis = ({ dictionary }: DailyIncomeAnalysisProps) => {
     return String(num).replace(/[0-9]/g, d => arabicNumerals[parseInt(d)])
   }
 
+  // Helper to convert hour labels to Arabic format (e.g., "12 AM - 1 AM" -> "١٢ ص - ١ ص")
+  const toLocalizedHourLabel = (hourLabel: string) => {
+    if (!isRtl || !hourLabel) return hourLabel
+    const arabicNumerals = '٠١٢٣٤٥٦٧٨٩'
+    return hourLabel
+      .replace(/[0-9]/g, d => arabicNumerals[parseInt(d)])
+      .replace(/AM/gi, 'ص')
+      .replace(/PM/gi, 'م')
+  }
+
   // Helper to format datetime to 12-hour format
   const formatDateTime12h = (dateString: string) => {
     if (!dateString) return '-'
@@ -680,7 +690,7 @@ const DailyIncomeAnalysis = ({ dictionary }: DailyIncomeAnalysisProps) => {
                 <i className='tabler-clock-hour-4 text-3xl' />
               </CustomAvatar>
               <Typography variant='h4' fontWeight={700}>
-                {dailyData.peak_hour.hour_label}
+                {toLocalizedHourLabel(dailyData.peak_hour.hour_label)}
               </Typography>
               <Typography variant='body1' color='success.main' fontWeight={500}>
                 {toLocalizedNum(Number(dailyData.peak_hour.revenue || 0).toFixed(0))} {dictionary?.common?.currency || 'EGP'}
@@ -796,7 +806,7 @@ const DailyIncomeAnalysis = ({ dictionary }: DailyIncomeAnalysisProps) => {
                     {dailyData.hourly_breakdown.slice(hourlyPage * rowsPerPage, hourlyPage * rowsPerPage + rowsPerPage).map((hour, index) => (
                       <tr key={index} className='border-b last:border-0'>
                         <td className='p-2'>
-                          <Typography variant='body2'>{hour.hour_label}</Typography>
+                          <Typography variant='body2'>{toLocalizedHourLabel(hour.hour_label)}</Typography>
                         </td>
                         <td className='p-2'>
                           <Typography variant='body2'>{toLocalizedNum(hour.order_count || 0)}</Typography>

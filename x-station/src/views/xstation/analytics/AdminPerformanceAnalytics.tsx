@@ -45,6 +45,44 @@ const AdminPerformanceAnalytics = ({ dictionary }: AdminPerformanceAnalyticsProp
     return String(num).replace(/[0-9]/g, d => arabicNumerals[parseInt(d)])
   }
 
+  // Day name translations
+  const dayNames: Record<string, { en: string; ar: string }> = {
+    'Sunday': { en: 'Sunday', ar: 'الأحد' },
+    'Monday': { en: 'Monday', ar: 'الإثنين' },
+    'Tuesday': { en: 'Tuesday', ar: 'الثلاثاء' },
+    'Wednesday': { en: 'Wednesday', ar: 'الأربعاء' },
+    'Thursday': { en: 'Thursday', ar: 'الخميس' },
+    'Friday': { en: 'Friday', ar: 'الجمعة' },
+    'Saturday': { en: 'Saturday', ar: 'السبت' }
+  }
+
+  // Role translations
+  const roleLabels: Record<string, { en: string; ar: string }> = {
+    'superadmin': { en: 'Super Admin', ar: 'مدير عام' },
+    'admin': { en: 'Admin', ar: 'مشرف' },
+    'cashier': { en: 'Cashier', ar: 'كاشير' },
+    'manager': { en: 'Manager', ar: 'مدير' }
+  }
+
+  // Status translations
+  const statusLabels: Record<string, { en: string; ar: string }> = {
+    'active': { en: 'Active', ar: 'نشط' },
+    'inactive': { en: 'Inactive', ar: 'غير نشط' }
+  }
+
+  // Helper functions for translations
+  const getLocalizedDayName = (dayName: string) => {
+    return dayNames[dayName]?.[isRtl ? 'ar' : 'en'] || dayName
+  }
+
+  const getLocalizedRole = (role: string) => {
+    return roleLabels[role?.toLowerCase()]?.[isRtl ? 'ar' : 'en'] || role
+  }
+
+  const getLocalizedStatus = (status: string) => {
+    return statusLabels[status?.toLowerCase()]?.[isRtl ? 'ar' : 'en'] || status
+  }
+
   // Helper to format datetime to 12-hour format
   const formatDateTime12h = (dateString: string) => {
     if (!dateString) return '-'
@@ -222,8 +260,8 @@ const AdminPerformanceAnalytics = ({ dictionary }: AdminPerformanceAnalyticsProp
               <tr>
                 <td>${adminData.name || '-'}</td>
                 <td>${adminData.email || '-'}</td>
-                <td>${adminData.role || '-'}</td>
-                <td class="${adminData.status === 'active' ? 'status-active' : 'status-inactive'}">${adminData.status || '-'}</td>
+                <td>${roleLabels[adminData.role?.toLowerCase()]?.[isRtl ? 'ar' : 'en'] || adminData.role || '-'}</td>
+                <td class="${adminData.status === 'active' ? 'status-active' : 'status-inactive'}">${statusLabels[adminData.status?.toLowerCase()]?.[isRtl ? 'ar' : 'en'] || adminData.status || '-'}</td>
                 <td>${adminData.days_present || 0}</td>
                 <td>${adminData.total_shifts || 0}</td>
                 <td>${Number(adminData.total_hours || 0).toFixed(1)}</td>
@@ -250,7 +288,7 @@ const AdminPerformanceAnalytics = ({ dictionary }: AdminPerformanceAnalyticsProp
             ${data.daily_performance.map((day: any) => `
               <tr>
                 <td>${day.date}</td>
-                <td>${day.day_name}</td>
+                <td>${dayNames[day.day_name]?.[isRtl ? 'ar' : 'en'] || day.day_name}</td>
                 <td>${day.shift_count}</td>
                 <td>${Number(day.hours || 0).toFixed(1)}</td>
                 <td>${day.orders}</td>
@@ -636,7 +674,7 @@ const AdminPerformanceAnalytics = ({ dictionary }: AdminPerformanceAnalyticsProp
                               </CustomAvatar>
                               <div>
                                 <Typography variant='body2' fontWeight={500}>{adminData.name}</Typography>
-                                <Typography variant='caption' color='text.secondary'>{adminData.role}</Typography>
+                                <Typography variant='caption' color='text.secondary'>{getLocalizedRole(adminData.role)}</Typography>
                               </div>
                             </div>
                           </td>
@@ -645,7 +683,7 @@ const AdminPerformanceAnalytics = ({ dictionary }: AdminPerformanceAnalyticsProp
                           </td>
                           <td className='p-3'>
                             <Chip
-                              label={adminData.status === 'active' ? (dictionary?.common?.active || 'Active') : (dictionary?.common?.inactive || 'Inactive')}
+                              label={getLocalizedStatus(adminData.status)}
                               color={adminData.status === 'active' ? 'success' : 'default'}
                               size='small'
                               variant='outlined'
@@ -775,7 +813,7 @@ const AdminPerformanceAnalytics = ({ dictionary }: AdminPerformanceAnalyticsProp
                           <Typography variant='body2'>{formatLocalDate(day.date, getLocaleForRtl(isRtl))}</Typography>
                         </td>
                         <td className='p-2'>
-                          <Typography variant='body2'>{day.day_name}</Typography>
+                          <Typography variant='body2'>{getLocalizedDayName(day.day_name)}</Typography>
                         </td>
                         <td className='p-2'>
                           <Typography variant='body2'>{toLocalizedNum(day.shift_count)}</Typography>

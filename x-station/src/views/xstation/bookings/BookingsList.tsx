@@ -110,6 +110,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   const [orderTab, setOrderTab] = useState(0)
   const [existingOrderItems, setExistingOrderItems] = useState<OrderItem[]>([]) // Original items from server
   const [hasExistingOrders, setHasExistingOrders] = useState(false) // Flag for update mode
+  const [itemSearchQuery, setItemSearchQuery] = useState('') // Search query for item selection
 
   // View Orders Dialog states
   const [viewOrdersDialogOpen, setViewOrdersDialogOpen] = useState(false)
@@ -558,6 +559,7 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
   const handleOpenAddOrder = (booking: ActiveBooking) => {
     setSelectedBookingForOrder(booking)
     setOrderTab(0)
+    setItemSearchQuery('') // Clear search when opening dialog
     fetchCafeteriaItems()
     
     // Load existing order items from booking's orders
@@ -833,6 +835,8 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
       : `${Number(duration).toFixed(1)} ${dictionary?.common?.hours || 'hrs'}`
     
     const roomPrice = Number(booking.price || booking.total_price || 0)
+    const discount = Number(booking.discount || 0)
+    const priceBeforeDiscount = roomPrice + discount
     const ordersTotal = Number(booking.orders_total || 0)
     const grandTotal = roomPrice + ordersTotal
     
@@ -847,6 +851,8 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     const durationLabel = dictionary?.bookings?.duration || 'Duration'
     const roomDurationLabel = dictionary?.bookings?.roomDuration || 'Room Duration'
     const roomCostLabel = dictionary?.bookings?.roomCost || 'Room Cost'
+    const discountLabel = dictionary?.bookings?.discount || 'Discount'
+    const afterDiscountLabel = dictionary?.bookings?.afterDiscount || 'After Discount'
     const ordersLabel = dictionary?.navigation?.orders || 'Orders'
     const itemLabel = dictionary?.orders?.item || 'Item'
     const qtyLabel = dictionary?.orders?.quantity || 'Qty'
@@ -906,6 +912,9 @@ body { font-family: "Courier New", monospace; padding: 10mm; max-width: 80mm; ma
 .section-title { font-weight: bold; font-size: 12px; margin: 10px 0 5px 0; padding: 5px 0; border-bottom: 1px dashed #000; }
 .room-section { margin: 10px 0; padding: 10px 0; border-top: 1px dashed #000; border-bottom: 1px dashed #000; }
 .room-cost { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; margin: 5px 0; }
+.room-cost-original { display: flex; justify-content: space-between; font-size: 11px; margin: 5px 0; color: #666; }
+.room-discount { display: flex; justify-content: space-between; font-size: 11px; margin: 5px 0; color: #d32f2f; }
+.room-cost-final { display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; margin: 5px 0; color: #2e7d32; }
 .orders-section { margin: 10px 0; }
 .order-block { margin: 8px 0; padding: 8px 0; border-bottom: 1px dotted #ccc; }
 .order-header { font-size: 10px; color: #666; margin-bottom: 5px; }
@@ -937,10 +946,25 @@ body { font-family: "Courier New", monospace; padding: 10mm; max-width: 80mm; ma
 <div class="info-row"><span>${startTimeLabel}:</span><span>${startTime}</span></div>
 <div class="info-row"><span>${endTimeLabel}:</span><span>${endTime}</span></div>
 <div class="info-row"><span>${durationLabel}:</span><span>${durationText}</span></div>
+${discount > 0 ? `
+<div class="room-cost-original">
+<span>${roomCostLabel}:</span>
+<span>${priceBeforeDiscount.toFixed(2)} ${currency}</span>
+</div>
+<div class="room-discount">
+<span>${discountLabel}:</span>
+<span>-${discount.toFixed(2)} ${currency}</span>
+</div>
+<div class="room-cost-final">
+<span>${afterDiscountLabel}:</span>
+<span>${roomPrice.toFixed(2)} ${currency}</span>
+</div>
+` : `
 <div class="room-cost">
 <span>${roomCostLabel}:</span>
 <span>${roomPrice.toFixed(2)} ${currency}</span>
 </div>
+`}
 </div>
 ${ordersHtml}
 <div class="grand-total">
@@ -1524,6 +1548,7 @@ ${ordersHtml}
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.endTime || 'End Time'}</th>
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.duration || 'Duration'}</th>
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.navigation?.orders || 'Orders'}</th>
+                        <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.discount || 'Discount'}</th>
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.bookings?.price || 'Price'}</th>
                         <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'}`}>{dictionary?.common?.actions || 'Actions'}</th>
                       </tr>
@@ -1588,11 +1613,23 @@ ${ordersHtml}
                               )}
                             </td>
                             <td className='p-3'>
+                              {Number(booking.discount) > 0 ? (
+                                <Chip
+                                  label={`-${isRtl ? toArabicDigits(Number(booking.discount).toFixed(2)) : Number(booking.discount).toFixed(2)} ${dictionary?.common?.currency || 'EGP'}`}
+                                  color='warning'
+                                  variant='outlined'
+                                  size='small'
+                                />
+                              ) : (
+                                <Typography variant='caption' color='text.secondary'>-</Typography>
+                              )}
+                            </td>
+                            <td className='p-3'>
                               <div className='flex flex-col gap-0.5'>
                                 <Typography variant='body2' fontWeight={500} color='success.main'>
                                   {isRtl ? toArabicDigits((booking.price || booking.total_price || 0).toString()) : (booking.price || booking.total_price || 0)} {dictionary?.common?.currency || 'EGP'}
                                 </Typography>
-                                {Number(booking.orders_total) > 0 && (
+                                {(Number(booking.orders_total) > 0 || Number(booking.price || 0) > 0) && (
                                   <Typography variant='caption' fontWeight={500} color='primary.main'>
                                     {dictionary?.common?.total || 'Total'}: {isRtl ? toArabicDigits((Number(booking.price || 0) + Number(booking.orders_total || 0)).toFixed(2)) : (Number(booking.price || 0) + Number(booking.orders_total || 0)).toFixed(2)} {dictionary?.common?.currency || 'EGP'}
                                   </Typography>
@@ -1955,35 +1992,65 @@ ${ordersHtml}
 
                 <Box className='mt-4'>
                   {orderTab === 0 && (
-                    <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto'>
-                      {availableItems.length > 0 ? (
-                        availableItems.map(item => {
-                          const remainingStock = getRemainingStock(item.id)
-                          const isOutOfStock = remainingStock <= 0
-                          return (
-                            <Card
-                              key={item.id}
-                              variant='outlined'
-                              className={`transition-colors ${isOutOfStock ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-primary'}`}
-                              onClick={() => !isOutOfStock && addItemToOrder(item)}
-                              sx={isOutOfStock ? { pointerEvents: 'auto' } : {}}
-                            >
-                              <CardContent className='p-3'>
-                                <Typography variant='body2' fontWeight={500} noWrap>
-                                  {item.name}
-                                </Typography>
-                                <div className={`flex justify-between items-center mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                                  <Typography variant='caption' color='success.main'>
-                                    {isRtl ? toArabicDigits(String(item.price)) : item.price} {dictionary?.common?.currency || 'EGP'}
-                                  </Typography>
-                                  <Typography variant='caption' color={isOutOfStock ? 'error.main' : 'text.secondary'}>
-                                    {isRtl ? toArabicDigits(String(remainingStock)) : remainingStock} {dictionary?.common?.inStock || 'left'}
-                                  </Typography>
-                                </div>
-                              </CardContent>
-                            </Card>
+                    <>
+                      {/* Search bar for items */}
+                      <CustomTextField
+                        label={dictionary?.orders?.searchProducts || 'Search Products'}
+                        value={itemSearchQuery}
+                        onChange={(e) => setItemSearchQuery(e.target.value)}
+                        placeholder={dictionary?.orders?.searchProductsPlaceholder || 'Search by product name...'}
+                        fullWidth
+                        className='mb-4'
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position='start'>
+                              <i className='tabler-search' />
+                            </InputAdornment>
                           )
-                        })
+                        }}
+                      />
+                      <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto'>
+                      {availableItems.length > 0 ? (
+                        availableItems
+                          .filter(item => !itemSearchQuery || item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()))
+                          .length > 0 ? (
+                          availableItems
+                            .filter(item => !itemSearchQuery || item.name.toLowerCase().includes(itemSearchQuery.toLowerCase()))
+                            .map(item => {
+                            const remainingStock = getRemainingStock(item.id)
+                            const isOutOfStock = remainingStock <= 0
+                            return (
+                              <Card
+                                key={item.id}
+                                variant='outlined'
+                                className={`transition-colors ${isOutOfStock ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-primary'}`}
+                                onClick={() => !isOutOfStock && addItemToOrder(item)}
+                                sx={isOutOfStock ? { pointerEvents: 'auto' } : {}}
+                              >
+                                <CardContent className='p-3'>
+                                  <Typography variant='body2' fontWeight={500} noWrap>
+                                    {item.name}
+                                  </Typography>
+                                  <div className={`flex justify-between items-center mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                    <Typography variant='caption' color='success.main'>
+                                      {isRtl ? toArabicDigits(String(item.price)) : item.price} {dictionary?.common?.currency || 'EGP'}
+                                    </Typography>
+                                    <Typography variant='caption' color={isOutOfStock ? 'error.main' : 'text.secondary'}>
+                                      {isRtl ? toArabicDigits(String(remainingStock)) : remainingStock} {dictionary?.common?.inStock || 'left'}
+                                    </Typography>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )
+                          })
+                        ) : (
+                          <div className='col-span-3 text-center py-8'>
+                            <i className='tabler-search-off text-4xl text-textSecondary mb-2' />
+                            <Typography color='text.secondary'>
+                              {dictionary?.common?.noResults || 'No results found'}
+                            </Typography>
+                          </div>
+                        )
                       ) : (
                         <div className='col-span-3 text-center py-8'>
                           <CircularProgress size={24} />
@@ -1992,7 +2059,8 @@ ${ordersHtml}
                           </Typography>
                         </div>
                       )}
-                    </div>
+                      </div>
+                    </>
                   )}
 
                   {orderTab === 1 && (

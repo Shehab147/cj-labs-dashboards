@@ -238,7 +238,7 @@ const RoomsAnalysis = ({ dictionary }: RoomsAnalysisProps) => {
           h2 { margin: 20px 0 10px; font-size: 18px; border-bottom: 2px solid #333; padding-bottom: 5px; }
           h3 { margin: 15px 0 8px; font-size: 14px; color: #555; }
           .date-range { text-align: center; color: #666; margin-bottom: 20px; }
-          .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px; }
+          .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
           .summary-box { border: 1px solid #ddd; padding: 15px; border-radius: 8px; text-align: center; }
           .summary-box .value { font-size: 20px; font-weight: bold; color: #333; }
           .summary-box .label { font-size: 12px; color: #666; margin-top: 5px; }
@@ -276,10 +276,6 @@ const RoomsAnalysis = ({ dictionary }: RoomsAnalysisProps) => {
           <div class="summary-box">
             <div class="value">${Number(analyticsData?.summary?.avg_duration_hours || 0).toFixed(1)} ${dictionary?.common?.hrs || 'h'}</div>
             <div class="label">${dictionary?.roomsAnalysis?.avgDuration || 'Avg Duration'}</div>
-          </div>
-          <div class="summary-box">
-            <div class="value">${analyticsData?.summary?.active_sessions || 0}</div>
-            <div class="label">${dictionary?.roomsAnalysis?.activeSessions || 'Active Sessions'}</div>
           </div>
         </div>
 
@@ -541,7 +537,7 @@ const RoomsAnalysis = ({ dictionary }: RoomsAnalysisProps) => {
       </Grid>
 
       {/* Summary Cards */}
-      <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Card>
           <CardContent className='flex flex-col items-center gap-2'>
             <CustomAvatar skin='light' color='primary' size={48}>
@@ -557,7 +553,7 @@ const RoomsAnalysis = ({ dictionary }: RoomsAnalysisProps) => {
         </Card>
       </Grid>
 
-      <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Card>
           <CardContent className='flex flex-col items-center gap-2'>
             <CustomAvatar skin='light' color='success' size={48}>
@@ -573,7 +569,7 @@ const RoomsAnalysis = ({ dictionary }: RoomsAnalysisProps) => {
         </Card>
       </Grid>
 
-      <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Card>
           <CardContent className='flex flex-col items-center gap-2'>
             <CustomAvatar skin='light' color='info' size={48}>
@@ -589,7 +585,7 @@ const RoomsAnalysis = ({ dictionary }: RoomsAnalysisProps) => {
         </Card>
       </Grid>
 
-      <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Card>
           <CardContent className='flex flex-col items-center gap-2'>
             <CustomAvatar skin='light' color='warning' size={48}>
@@ -600,22 +596,6 @@ const RoomsAnalysis = ({ dictionary }: RoomsAnalysisProps) => {
             </Typography>
             <Typography variant='body2' color='text.secondary'>
               {dictionary?.roomsAnalysis?.avgDuration || 'Avg Duration (hrs)'}
-            </Typography>
-          </CardContent>
-        </Card>
-      </Grid>
-
-      <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-        <Card>
-          <CardContent className='flex flex-col items-center gap-2'>
-            <CustomAvatar skin='light' color='secondary' size={48}>
-              <i className='tabler-users text-2xl' />
-            </CustomAvatar>
-            <Typography variant='h4' className='font-bold'>
-              {toLocalizedNum(analyticsData?.summary?.active_sessions || 0)}
-            </Typography>
-            <Typography variant='body2' color='text.secondary'>
-              {dictionary?.roomsAnalysis?.activeSessions || 'Active Sessions'}
             </Typography>
           </CardContent>
         </Card>

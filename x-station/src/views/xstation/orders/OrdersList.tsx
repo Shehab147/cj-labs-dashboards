@@ -68,6 +68,7 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [dateFilter, setDateFilter] = useState('today')
+  const [productSearchQuery, setProductSearchQuery] = useState('')
   
   // Pagination states
   const [page, setPage] = useState(1)
@@ -286,7 +287,7 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
     const thankYouLabel = dictionary?.orders?.thankYou || 'Thank you for your order!'
     const currency = dictionary?.common?.currency || 'EGP'
     const receiptLabel = dictionary?.orders?.receipt || 'Receipt'
-    const totalAmount = Number('total_amount' in order ? order.total_amount : 0).toFixed(2)
+    const totalAmount = Number('total_amount' in order && order.total_amount ? order.total_amount : ('price' in order ? order.price : 0)).toFixed(2)
     const orderDate = formatLocalDate(order.created_at, getLocaleForRtl(isRtl))
     const orderTime = formatLocalTime(order.created_at, getLocaleForRtl(isRtl))
     const todayDate = new Date().toLocaleDateString(getLocaleForRtl(isRtl))
@@ -750,8 +751,29 @@ ${itemsHtml}
 
               <Box className='mt-4'>
                 {orderTab === 0 && (
-                  <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto'>
-                    {availableItems.map(item => (
+                  <>
+                    <CustomTextField
+                      label={dictionary?.orders?.searchProducts || 'Search Products'}
+                      value={productSearchQuery}
+                      onChange={e => setProductSearchQuery(e.target.value)}
+                      placeholder={dictionary?.orders?.searchProductsPlaceholder || 'Search by product name...'}
+                      fullWidth
+                      className='mb-4'
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position='start'>
+                            <i className='tabler-search' />
+                          </InputAdornment>
+                        )
+                      }}
+                    />
+                    <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto'>
+                      {availableItems
+                        .filter(item => 
+                          !productSearchQuery || 
+                          item.name.toLowerCase().includes(productSearchQuery.toLowerCase())
+                        )
+                        .map(item => (
                       <Card
                         key={item.id}
                         variant='outlined'
@@ -773,7 +795,8 @@ ${itemsHtml}
                         </CardContent>
                       </Card>
                     ))}
-                  </div>
+                    </div>
+                  </>
                 )}
 
                 {orderTab === 1 && (
