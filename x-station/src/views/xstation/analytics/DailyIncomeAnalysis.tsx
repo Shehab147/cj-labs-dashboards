@@ -806,7 +806,7 @@ const DailyIncomeAnalysis = ({ dictionary }: DailyIncomeAnalysisProps) => {
                     {dailyData.hourly_breakdown.slice(hourlyPage * rowsPerPage, hourlyPage * rowsPerPage + rowsPerPage).map((hour, index) => (
                       <tr key={index} className='border-b last:border-0'>
                         <td className='p-2'>
-                          <Typography variant='body2'>{toLocalizedHourLabel(hour.hour_label)}</Typography>
+                          <Typography variant='body2'>{toLocalizedHourLabel(hour.hour_label || '')}</Typography>
                         </td>
                         <td className='p-2'>
                           <Typography variant='body2'>{toLocalizedNum(hour.order_count || 0)}</Typography>
