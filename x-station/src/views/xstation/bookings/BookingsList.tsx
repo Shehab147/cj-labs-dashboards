@@ -1491,6 +1491,16 @@ ${ordersHtml}
                               {isPending && (
                                 <Chip label={dictionary?.bookings?.notStarted || 'Not Started'} size='small' color='default' />
                               )}
+                              {!isActive && !isPending && booking.status === 'completed' && (
+                                <IconButton
+                                  size='small'
+                                  color='primary'
+                                  onClick={() => printBookingReceipt(booking)}
+                                  title={dictionary?.orders?.printReceipt || 'Print Receipt'}
+                                >
+                                  <i className='tabler-printer' />
+                                </IconButton>
+                              )}
                             </td>
                           </tr>
                         )
