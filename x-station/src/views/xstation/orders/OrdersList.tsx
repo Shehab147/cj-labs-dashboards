@@ -644,45 +644,45 @@ ${itemsHtml}
                 <table className='w-full'>
                   <thead>
                     <tr className='border-b'>
-                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`}>#</th>
-                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`}>{dictionary?.orders?.customer || 'Customer'}</th>
-                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`}>{dictionary?.orders?.items || 'Items'}</th>
-                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`}>{dictionary?.orders?.total || 'Total'}</th>
-                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`}>{dictionary?.common?.time || 'Time'}</th>
-                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`}>{dictionary?.common?.actions || 'Actions'}</th>
+                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`} style={{ verticalAlign: 'middle' }}>#</th>
+                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`} style={{ verticalAlign: 'middle' }}>{dictionary?.orders?.customer || 'Customer'}</th>
+                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`} style={{ verticalAlign: 'middle' }}>{dictionary?.orders?.items || 'Items'}</th>
+                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`} style={{ verticalAlign: 'middle' }}>{dictionary?.orders?.total || 'Total'}</th>
+                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`} style={{ verticalAlign: 'middle' }}>{dictionary?.common?.time || 'Time'}</th>
+                      <th className={`${isRtl ? 'text-right' : 'text-start'} p-3`} style={{ verticalAlign: 'middle' }}>{dictionary?.common?.actions || 'Actions'}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedOrders.map(order => (
                       <tr key={order.id} className='border-b last:border-0'>
-                        <td className='p-3'>
+                        <td className='p-3' style={{ verticalAlign: 'middle' }}>
                           <Typography variant='body2' fontWeight={500}>
                             #{toLocalizedNum(order.id)}
                           </Typography>
                         </td>
-                        <td className='p-3'>
+                        <td className='p-3' style={{ verticalAlign: 'middle' }}>
                           <Typography variant='body2'>{order.customer_name}</Typography>
                           <Typography variant='caption' color='text.secondary'>
                             {order.customer_phone}
                           </Typography>
                         </td>
-                        <td className='p-3'>
+                        <td className='p-3' style={{ verticalAlign: 'middle' }}>
                           <Typography variant='body2'>
                             {toLocalizedNum(order.items_count || order.items?.length || 0)} {dictionary?.orders?.items || 'items'}
                           </Typography>
                         </td>
-                        <td className='p-3'>
+                        <td className='p-3' style={{ verticalAlign: 'middle' }}>
                           <Typography variant='body2' color='success.main' fontWeight={500}>
                             {toLocalizedNum(Number(order.total_amount || order.price).toFixed(2))} {dictionary?.common?.currency || 'EGP'}
                           </Typography>
                         </td>
-                        <td className='p-3'>
+                        <td className='p-3' style={{ verticalAlign: 'middle' }}>
                           <Typography variant='body2'>
                             {formatLocalTime(order.created_at, getLocaleForRtl(isRtl))}
                           </Typography>
                         </td>
-                        <td className='p-3'>
-                          <div className={`flex gap-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <td className={`p-3 ${isRtl ? 'text-right' : 'text-start'}`} style={{ verticalAlign: 'middle' }}>
+                          <div className={`inline-flex gap-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
                             <IconButton
                               size='small'
                               onClick={() => {
