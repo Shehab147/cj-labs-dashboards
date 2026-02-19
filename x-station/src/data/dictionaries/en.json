@@ -398,7 +398,11 @@
     "existing": "Existing",
     "allItemsCleared": "All items cleared. Click Delete All Items to confirm.",
     "searchProducts": "Search Products",
-    "searchProductsPlaceholder": "Search by product name..."
+    "searchProductsPlaceholder": "Search by product name...",
+    "addNewItems": "Add Items",
+    "addItemsNote": "Note: To add new items, please create a new order or use the quick order feature.",
+    "noItemsInOrder": "No items in this order",
+    "deleteOrderWarning": "This action cannot be undone. Are you sure you want to delete this order?"
   },
   "analytics": {
     "title": "Analytics",

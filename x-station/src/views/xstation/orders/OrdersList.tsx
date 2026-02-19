@@ -77,7 +77,10 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
   // Dialog states
   const [newOrderDialogOpen, setNewOrderDialogOpen] = useState(false)
   const [viewOrderDialogOpen, setViewOrderDialogOpen] = useState(false)
+  const [editOrderDialogOpen, setEditOrderDialogOpen] = useState(false)
+  const [deleteConfirmDialogOpen, setDeleteConfirmDialogOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null)
 
   // New order form
   const [orderData, setOrderData] = useState({
@@ -86,6 +89,12 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
     items: [] as OrderItem[]
   })
   const [orderTab, setOrderTab] = useState(0)
+
+  // Edit order form
+  const [editOrderData, setEditOrderData] = useState<{
+    items: Array<{ order_item_id: number; item_id: number; name: string; price: number; quantity: number }>
+  }>({ items: [] })
+  const [editOrderTab, setEditOrderTab] = useState(0)
 
   // Get selected customer details
   const selectedCustomer = orderData.customer_id 
@@ -212,6 +221,87 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
       setIsSubmitting(false)
     }
   }
+
+  const handleOpenEditDialog = (order: Order) => {
+    setSelectedOrder(order)
+    setEditOrderData({
+      items: order.items?.map((item: any) => ({
+        order_item_id: item.id || item.order_item_id,
+        item_id: item.item_id,
+        name: item.item_name || item.name,
+        price: Number(item.unit_price || item.price || (item.total_price / item.quantity)),
+        quantity: item.quantity
+      })) || []
+    })
+    setEditOrderTab(0)
+    setEditOrderDialogOpen(true)
+  }
+
+  const handleUpdateOrderItem = async (orderItemId: number, quantity: number) => {
+    try {
+      setIsSubmitting(true)
+      if (quantity <= 0) {
+        // Delete the item
+        const response = await orderApi.deleteItem(orderItemId)
+        if (response.status === 'success') {
+          setEditOrderData({
+            ...editOrderData,
+            items: editOrderData.items.filter(i => i.order_item_id !== orderItemId)
+          })
+          setSuccessMessage(dictionary?.orders?.itemDeleted || 'Item removed from order')
+        } else {
+          setError(response.message || dictionary?.errors?.somethingWentWrong)
+        }
+      } else {
+        // Update quantity
+        const response = await orderApi.updateItem(orderItemId, quantity)
+        if (response.status === 'success') {
+          setEditOrderData({
+            ...editOrderData,
+            items: editOrderData.items.map(i =>
+              i.order_item_id === orderItemId ? { ...i, quantity } : i
+            )
+          })
+          setSuccessMessage(dictionary?.orders?.itemUpdated || 'Item quantity updated')
+        } else {
+          setError(response.message || dictionary?.errors?.somethingWentWrong)
+        }
+      }
+    } catch (err) {
+      setError(dictionary?.errors?.networkError)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDeleteOrder = async () => {
+    if (!orderToDelete) return
+    
+    try {
+      setIsSubmitting(true)
+      const response = await orderApi.delete(orderToDelete.id)
+
+      if (response.status === 'success') {
+        setSuccessMessage(dictionary?.orders?.orderDeleted || 'Order deleted successfully')
+        setDeleteConfirmDialogOpen(false)
+        setOrderToDelete(null)
+        fetchData()
+      } else {
+        setError(response.message || dictionary?.errors?.somethingWentWrong)
+      }
+    } catch (err) {
+      setError(dictionary?.errors?.networkError)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleOpenDeleteDialog = (order: Order) => {
+    setOrderToDelete(order)
+    setDeleteConfirmDialogOpen(true)
+  }
+
+  const editOrderTotal = editOrderData.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
   const addItemToOrder = (item: CafeteriaItem) => {
     const existingItem = orderData.items.find(i => i.item_id === item.id)
@@ -605,10 +695,26 @@ ${itemsHtml}
                             </IconButton>
                             <IconButton
                               size='small'
+                              onClick={() => handleOpenEditDialog(order)}
+                              title={dictionary?.orders?.editOrder || 'Edit Order'}
+                              color='primary'
+                            >
+                              <i className='tabler-edit' />
+                            </IconButton>
+                            <IconButton
+                              size='small'
                               onClick={() => printReceipt(order)}
                               title={dictionary?.orders?.printReceipt || 'Print Receipt'}
                             >
                               <i className='tabler-printer' />
+                            </IconButton>
+                            <IconButton
+                              size='small'
+                              onClick={() => handleOpenDeleteDialog(order)}
+                              title={dictionary?.orders?.deleteOrder || 'Delete Order'}
+                              color='error'
+                            >
+                              <i className='tabler-trash' />
                             </IconButton>
                           </div>
                         </td>
@@ -774,7 +880,7 @@ ${itemsHtml}
                           item.name.toLowerCase().includes(productSearchQuery.toLowerCase())
                         )
                         .map(item => (
-                      <Card
+                      <Card 
                         key={item.id}
                         variant='outlined'
                         className='cursor-pointer hover:border-primary transition-colors'
@@ -1046,6 +1152,241 @@ ${itemsHtml}
               {dictionary?.orders?.printReceipt || 'Print Receipt'}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Order Dialog */}
+      <Dialog open={editOrderDialogOpen} onClose={() => setEditOrderDialogOpen(false)} maxWidth='md' fullWidth>
+        <DialogTitle dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className={`flex justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <span>{dictionary?.orders?.editOrder || 'Edit Order'} #{selectedOrder?.id}</span>
+          </div>
+        </DialogTitle>
+        <DialogContent dir={isRtl ? 'rtl' : 'ltr'}>
+          {selectedOrder && (
+            <div className='flex flex-col gap-4 pt-2'>
+              {/* Customer Info */}
+              <Card variant='outlined'>
+                <CardContent>
+                  <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <div className='rounded-full p-2 bg-primary/10'>
+                      <i className='tabler-user text-primary' />
+                    </div>
+                    <div className={isRtl ? 'text-right' : ''}>
+                      <Typography variant='body1' fontWeight={500}>{selectedOrder.customer_name}</Typography>
+                      <Typography variant='body2' color='text.secondary'>{selectedOrder.customer_phone}</Typography>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Edit Items */}
+              <Box>
+                <Tabs value={editOrderTab} onChange={(_, v) => setEditOrderTab(v)}>
+                  <Tab label={`${dictionary?.orders?.orderItems || 'Order Items'} (${editOrderData.items.length})`} />
+                  <Tab label={dictionary?.orders?.addNewItems || 'Add Items'} />
+                </Tabs>
+
+                <Box className='mt-4'>
+                  {editOrderTab === 0 && (
+                    <div>
+                      {editOrderData.items.length > 0 ? (
+                        <div className='flex flex-col gap-3'>
+                          {editOrderData.items.map(item => (
+                            <div
+                              key={item.order_item_id}
+                              className={`flex items-center justify-between p-3 border rounded-lg ${isRtl ? 'flex-row-reverse' : ''}`}
+                            >
+                              <div className={isRtl ? 'text-right' : ''}>
+                                <Typography variant='body2' fontWeight={500}>
+                                  {item.name}
+                                </Typography>
+                                <Typography variant='caption' color='text.secondary'>
+                                  {toLocalizedNum(item.price)} {dictionary?.common?.currency || 'EGP'} x {toLocalizedNum(item.quantity)} = {toLocalizedNum((item.price * item.quantity).toFixed(2))} {dictionary?.common?.currency || 'EGP'}
+                                </Typography>
+                              </div>
+                              <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                <IconButton
+                                  size='small'
+                                  onClick={() => handleUpdateOrderItem(item.order_item_id, item.quantity - 1)}
+                                  disabled={isSubmitting}
+                                >
+                                  <i className='tabler-minus text-sm' />
+                                </IconButton>
+                                <Typography variant='body2' className='w-8 text-center'>
+                                  {toLocalizedNum(item.quantity)}
+                                </Typography>
+                                <IconButton
+                                  size='small'
+                                  onClick={() => handleUpdateOrderItem(item.order_item_id, item.quantity + 1)}
+                                  disabled={isSubmitting}
+                                >
+                                  <i className='tabler-plus text-sm' />
+                                </IconButton>
+                                <IconButton
+                                  size='small'
+                                  color='error'
+                                  onClick={() => handleUpdateOrderItem(item.order_item_id, 0)}
+                                  disabled={isSubmitting}
+                                  title={dictionary?.common?.delete || 'Delete'}
+                                >
+                                  <i className='tabler-trash text-sm' />
+                                </IconButton>
+                              </div>
+                            </div>
+                          ))}
+                          <Divider />
+                          <div className={`flex justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                            <Typography variant='h6'>
+                              {dictionary?.orders?.total || 'Total'}
+                            </Typography>
+                            <Typography variant='h5' color='success.main'>
+                              {toLocalizedNum(editOrderTotal.toFixed(2))} {dictionary?.common?.currency || 'EGP'}
+                            </Typography>
+                          </div>
+                        </div>
+                      ) : (
+                        <Typography color='text.secondary' className='text-center py-8'>
+                          {dictionary?.orders?.noItemsInOrder || 'No items in this order'}
+                        </Typography>
+                      )}
+                    </div>
+                  )}
+
+                  {editOrderTab === 1 && (
+                    <>
+                      <Alert severity='info' className='mb-4' sx={{ overflow: 'hidden', '& .MuiAlert-message': { overflow: 'hidden' } }}>
+                        {dictionary?.orders?.addItemsNote || 'Note: To add new items, please create a new order or use the quick order feature.'}
+                      </Alert>
+                      <CustomTextField
+                        label={dictionary?.orders?.searchProducts || 'Search Products'}
+                        value={productSearchQuery}
+                        onChange={e => setProductSearchQuery(e.target.value)}
+                        placeholder={dictionary?.orders?.searchProductsPlaceholder || 'Search by product name...'}
+                        fullWidth
+                        className='mb-4'
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position='start'>
+                              <i className='tabler-search' />
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                      <div className='grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto'>
+                        {availableItems
+                          .filter(item =>
+                            !productSearchQuery ||
+                            item.name.toLowerCase().includes(productSearchQuery.toLowerCase())
+                          )
+                          .map(item => (
+                            <Card
+                              key={item.id}
+                              variant='outlined'
+                              className='cursor-not-allowed opacity-60'
+                            >
+                              <CardContent className='p-3'>
+                                <Typography variant='body2' fontWeight={500} noWrap>
+                                  {item.name}
+                                </Typography>
+                                <div className={`flex justify-between items-center mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                  <Typography variant='caption' color='success.main'>
+                                    {toLocalizedNum(item.price)} {dictionary?.common?.currency || 'EGP'}
+                                  </Typography>
+                                  <Typography variant='caption' color='text.secondary'>
+                                    {toLocalizedNum(item.stock)} {dictionary?.common?.inStock || 'left'}
+                                  </Typography>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                      </div>
+                    </>
+                  )}
+                </Box>
+              </Box>
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ flexDirection: isRtl ? 'row-reverse' : 'row', gap: 1 }}>
+          <Button 
+            onClick={() => {
+              setEditOrderDialogOpen(false)
+              fetchData() // Refresh data when closing
+            }}
+          >
+            {dictionary?.common?.close || 'Close'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmDialogOpen} onClose={() => setDeleteConfirmDialogOpen(false)} maxWidth='xs' fullWidth>
+        <DialogTitle dir={isRtl ? 'rtl' : 'ltr'}>
+          {dictionary?.orders?.deleteOrder || 'Delete Order'}
+        </DialogTitle>
+        <DialogContent dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className='flex flex-col gap-4 pt-2'>
+            <Alert severity='warning' sx={{ overflow: 'hidden', '& .MuiAlert-message': { overflow: 'hidden' } }}>
+              {dictionary?.orders?.deleteOrderWarning || 'This action cannot be undone. Are you sure you want to delete this order?'}
+            </Alert>
+            {orderToDelete && (
+              <Card variant='outlined'>
+                <CardContent>
+                  <div className='grid grid-cols-2 gap-3'>
+                    <div className={isRtl ? 'text-right' : ''}>
+                      <Typography variant='caption' color='text.secondary'>
+                        {dictionary?.orders?.orderId || 'Order ID'}
+                      </Typography>
+                      <Typography variant='body1' fontWeight={500}>#{toLocalizedNum(orderToDelete.id)}</Typography>
+                    </div>
+                    <div className={isRtl ? 'text-right' : ''}>
+                      <Typography variant='caption' color='text.secondary'>
+                        {dictionary?.orders?.customer || 'Customer'}
+                      </Typography>
+                      <Typography variant='body1'>{orderToDelete.customer_name}</Typography>
+                    </div>
+                    <div className={isRtl ? 'text-right' : ''}>
+                      <Typography variant='caption' color='text.secondary'>
+                        {dictionary?.orders?.total || 'Total'}
+                      </Typography>
+                      <Typography variant='body1' color='success.main' fontWeight={500}>
+                        {toLocalizedNum(Number(orderToDelete.total_amount || orderToDelete.price).toFixed(2))} {dictionary?.common?.currency || 'EGP'}
+                      </Typography>
+                    </div>
+                    <div className={isRtl ? 'text-right' : ''}>
+                      <Typography variant='caption' color='text.secondary'>
+                        {dictionary?.common?.date || 'Date'}
+                      </Typography>
+                      <Typography variant='body1'>
+                        {formatLocalDate(orderToDelete.created_at, getLocaleForRtl(isRtl))}
+                      </Typography>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </DialogContent>
+        <DialogActions sx={{ flexDirection: isRtl ? 'row-reverse' : 'row', gap: 1 }}>
+          <Button 
+            onClick={() => {
+              setDeleteConfirmDialogOpen(false)
+              setOrderToDelete(null)
+            }} 
+            disabled={isSubmitting}
+          >
+            {dictionary?.common?.cancel || 'Cancel'}
+          </Button>
+          <Button
+            variant='contained'
+            color='error'
+            onClick={handleDeleteOrder}
+            disabled={isSubmitting}
+            startIcon={isSubmitting ? <CircularProgress size={16} /> : <i className='tabler-trash' />}
+          >
+            {dictionary?.common?.delete || 'Delete'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Grid>

@@ -421,7 +421,11 @@
     "existing": "موجود",
     "allItemsCleared": "تم مسح جميع العناصر. انقر على حذف جميع العناصر للتأكيد.",
     "searchProducts": "البحث عن المنتجات",
-    "searchProductsPlaceholder": "ابحث باسم المنتج..."
+    "searchProductsPlaceholder": "ابحث باسم المنتج...",
+    "addNewItems": "إضافة منتجات",
+    "addItemsNote": "ملاحظة: لإضافة منتجات جديدة، يرجى إنشاء طلب جديد أو استخدام ميزة الطلب السريع.",
+    "noItemsInOrder": "لا توجد منتجات في هذا الطلب",
+    "deleteOrderWarning": "لا يمكن التراجع عن هذا الإجراء. هل أنت متأكد من حذف هذا الطلب؟"
   },
   "analytics": {
     "title": "التحليلات",
