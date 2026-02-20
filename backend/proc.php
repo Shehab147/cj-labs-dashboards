@@ -272,6 +272,7 @@ function endShift($admin = null, $shouldRespond = true){
     $stmt->close();
     
     // Calculate shift income from room bookings during this shift
+    // Only count actually completed bookings (finished_at <= NOW), not future scheduled ones
     $stmt = $conn->prepare("
         SELECT 
             COUNT(*) as booking_count,
@@ -279,6 +280,7 @@ function endShift($admin = null, $shouldRespond = true){
         FROM room_booking 
         WHERE createdAt >= ? AND createdAt <= ?
         AND finished_at IS NOT NULL
+        AND finished_at <= NOW()
     ");
     $stmt->bind_param("ss", $started_at, $ended_at);
     $stmt->execute();
@@ -1331,15 +1333,11 @@ function endBooking(){
     $is_scheduled = ($booking['finished_at'] !== null && $booking['price'] > 0);
     
     if($is_scheduled){
-        // SCHEDULED BOOKING - Can only "end" if we want to end early
+        // SCHEDULED BOOKING - End and recalculate price based on actual time used
         $scheduled_finish = $booking['finished_at'];
         
-        // Check if already past scheduled finish time
-        if($current_time >= $scheduled_finish){
-            respond('error', 'Scheduled booking has already ended at ' . $scheduled_finish);
-        }
-        
-        // End early - recalculate price based on actual time used
+        // End booking now - recalculate price based on actual time used
+        // This allows billing for overstays (actual time > scheduled time)
         $finished_at = $current_time;
         
         // Check if session has actually started
@@ -1376,8 +1374,12 @@ function endBooking(){
         $stmt->execute();
         $stmt->close();
         
+        // Determine if ended early or overstayed
+        $price_difference = round($price - (float)$booking['price'], 2);
+        $ended_early = ($current_time < $scheduled_finish);
+        
         respond('success', [
-            'message' => 'Scheduled booking ended early.',
+            'message' => $ended_early ? 'Scheduled booking ended early.' : 'Scheduled booking ended (overstay billed).',
             'booking_id' => $booking_id,
             'scheduled_start' => $started_at,
             'scheduled_finish' => $scheduled_finish,
@@ -1389,7 +1391,8 @@ function endBooking(){
             'discount' => $discount,
             'total_price' => $price,
             'original_price' => (float)$booking['price'],
-            'savings' => round((float)$booking['price'] - $price, 2)
+            'price_difference' => $price_difference,
+            'ended_early' => $ended_early
         ]);
         
     } else {
@@ -1606,7 +1609,7 @@ function listBookings(){
     
     while($row = $result->fetch_assoc()){
         $start = new DateTime($row['started_at']);
-        $is_open_session = ($row['finished_at'] === null || ($row['finished_at'] === null && $row['price'] == 0));
+        $is_open_session = ($row['finished_at'] === null);
         $is_multi = isset($row['is_multi']) ? (int)$row['is_multi'] : 0;
         // Use appropriate hourly cost based on is_multi
         $applicable_hour_cost = $is_multi ? (float)$row['multi_hour_cost'] : (float)$row['hour_cost'];
@@ -1649,11 +1652,7 @@ function listBookings(){
         }
         
         // Add booking type
-        if($row['finished_at'] === null || ($row['price'] == 0 && $row['finished_at'] === null)){
-            $row['booking_type'] = 'open_session';
-        } else {
-            $row['booking_type'] = 'scheduled';
-        }
+        $row['booking_type'] = ($row['finished_at'] === null) ? 'open_session' : 'scheduled';
         
         $bookings[] = $row;
     }
@@ -2167,8 +2166,8 @@ function addOrder(){
     if($finalPrice < 0) $finalPrice = 0;
     
     // Create order
-    $stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount) VALUES (?, ?, ?)");
-    $stmt->bind_param("idd", $customer_id, $finalPrice, $discount);
+$stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount, booking_id) VALUES (?, ?, ?, 0)");
+    $stmt->bind_param("iddi", $customer_id, $finalPrice, $discount);
     $stmt->execute();
     $orderId = $conn->insert_id;
     $stmt->close();
@@ -2390,7 +2389,7 @@ function deleteOrderItems(){
                 'order_deleted' => true,
                 'stock_restored' => $quantity,
                 'item_name' => $item_name,
-                'deleted_by' => $admin['username']
+                'deleted_by' => $admin['name']
             ]);
         } else {
             // Recalculate order total based on remaining items
@@ -2416,7 +2415,7 @@ function deleteOrderItems(){
                 'new_order_subtotal' => $new_subtotal,
                 'new_order_total' => $new_price,
                 'remaining_items' => (int)$remaining['remaining_count'],
-                'deleted_by' => $admin['username']
+                'deleted_by' => $admin['name']
             ]);
         }
     } catch (Exception $e) {
@@ -2547,7 +2546,7 @@ function updateOrderItem(){
             'stock_adjusted_by' => $quantity_diff,
             'new_order_subtotal' => $new_subtotal,
             'new_order_total' => $new_order_total,
-            'updated_by' => $admin['username']
+            'updated_by' => $admin['name']
         ]);
         
     } catch (Exception $e) {
@@ -3208,7 +3207,17 @@ function getFullCafeteriaAnalytics(){
     $endDate = isset($input['end_date']) ? $input['end_date'] : null;
     $export = isset($input['export']) ? $input['export'] : null;
     
-    // Build date filter
+    // Build date filter for subquery
+    $dateFilterCondition = "";
+    if($startDate && $endDate){
+        $dateFilterCondition = " WHERE DATE(o.created_at) BETWEEN '$startDate' AND '$endDate'";
+    } elseif($startDate){
+        $dateFilterCondition = " WHERE DATE(o.created_at) >= '$startDate'";
+    } elseif($endDate){
+        $dateFilterCondition = " WHERE DATE(o.created_at) <= '$endDate'";
+    }
+    
+    // Build date filter for direct queries
     $dateFilter = "";
     if($startDate && $endDate){
         $dateFilter = " AND DATE(o.created_at) BETWEEN '$startDate' AND '$endDate'";
@@ -3218,8 +3227,33 @@ function getFullCafeteriaAnalytics(){
         $dateFilter = " AND DATE(o.created_at) <= '$endDate'";
     }
     
-    // All items with sales data
-    $itemsResult = $conn->query("
+    // All items with sales data - use subquery to properly filter by date range
+    // This ensures items with no sales in range show 0, and items with sales only count within range
+    $itemsQuery = $dateFilterCondition ? "
+        SELECT 
+            ci.id, ci.name, ci.cost, ci.price, ci.stock, ci.photo,
+            COALESCE(filtered_sales.total_sold, 0) as total_sold,
+            COALESCE(filtered_sales.total_revenue, 0) as total_revenue,
+            COALESCE(filtered_sales.total_cost, 0) as total_cost,
+            COALESCE(filtered_sales.profit, 0) as profit,
+            COALESCE(filtered_sales.order_count, 0) as order_count
+        FROM cafeteria_items ci
+        LEFT JOIN (
+            SELECT 
+                oi.item_id,
+                SUM(oi.quantity) as total_sold,
+                SUM(oi.total_price) as total_revenue,
+                SUM(ci2.cost * oi.quantity) as total_cost,
+                SUM(oi.total_price) - SUM(ci2.cost * oi.quantity) as profit,
+                COUNT(DISTINCT oi.order_id) as order_count
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            JOIN cafeteria_items ci2 ON oi.item_id = ci2.id
+            $dateFilterCondition
+            GROUP BY oi.item_id
+        ) filtered_sales ON ci.id = filtered_sales.item_id
+        ORDER BY total_sold DESC
+    " : "
         SELECT 
             ci.id, ci.name, ci.cost, ci.price, ci.stock, ci.photo,
             COALESCE(SUM(oi.quantity), 0) as total_sold,
@@ -3229,10 +3263,11 @@ function getFullCafeteriaAnalytics(){
             COUNT(DISTINCT oi.order_id) as order_count
         FROM cafeteria_items ci
         LEFT JOIN order_items oi ON ci.id = oi.item_id
-        LEFT JOIN orders o ON oi.order_id = o.id " . ($dateFilter ? "AND 1=1 $dateFilter" : "") . "
+        LEFT JOIN orders o ON oi.order_id = o.id
         GROUP BY ci.id
         ORDER BY total_sold DESC
-    ");
+    ";
+    $itemsResult = $conn->query($itemsQuery);
     $allItems = [];
     $totalInventoryValue = 0;
     $totalPotentialRevenue = 0;
@@ -4174,13 +4209,21 @@ function cancelBooking(){
         respond('error', 'Booking not found.');
     }
     
-    // Only superadmin can delete ended bookings
-    if($booking['finished_at'] !== null && $admin['role'] != 'superadmin'){
+    // Only superadmin can delete actually completed bookings
+    // A booking is "completed" if finished_at is set AND finished_at <= NOW()
+    // Scheduled bookings have finished_at set but may not have actually completed yet
+    $isActuallyCompleted = ($booking['finished_at'] !== null && strtotime($booking['finished_at']) <= time());
+    
+    if($isActuallyCompleted && $admin['role'] != 'superadmin'){
         respond('error', 'Cannot cancel completed bookings.');
     }
     
     // Free the room if booking was active
-    if($booking['finished_at'] === null){
+    // This includes: open sessions (finished_at === null) OR active scheduled bookings (started_at <= NOW)
+    $isActiveBooking = ($booking['finished_at'] === null) || 
+                       ($booking['started_at'] !== null && strtotime($booking['started_at']) <= time());
+    
+    if($isActiveBooking){
         $stmt = $conn->prepare("UPDATE rooms SET is_booked = 0 WHERE id = ?");
         $stmt->bind_param("i", $booking['room_id']);
         $stmt->execute();
@@ -4759,7 +4802,7 @@ function getFrontDeskDashboard(){
         FROM room_booking rb
         JOIN rooms r ON rb.room_id = r.id
         LEFT JOIN customers c ON rb.customer_id = c.id
-        WHERE rb.finished_at IS NULL
+WHERE (rb.finished_at IS NULL OR (rb.started_at <= NOW() AND rb.finished_at > NOW()))
         ORDER BY rb.started_at ASC
     ");
     $activeBookings = [];
@@ -4794,16 +4837,17 @@ function getFrontDeskDashboard(){
     $todayOrdersResult = $conn->query("SELECT COUNT(*) as count, COALESCE(SUM(price), 0) as revenue FROM orders WHERE DATE(created_at) = CURDATE()");
     $todayOrders = $todayOrdersResult->fetch_assoc();
     
-    $todayBookingsResult = $conn->query("SELECT COUNT(*) as count, COALESCE(SUM(price), 0) as revenue FROM room_booking WHERE DATE(createdAt) = CURDATE() AND finished_at IS NOT NULL");
+    // Only count actually completed bookings (finished_at <= NOW), not future scheduled ones
+    $todayBookingsResult = $conn->query("SELECT COUNT(*) as count, COALESCE(SUM(price), 0) as revenue FROM room_booking WHERE DATE(createdAt) = CURDATE() AND finished_at IS NOT NULL AND finished_at <= NOW()");
     $todayBookings = $todayBookingsResult->fetch_assoc();
     
-    // Recent completed bookings (last 5)
+    // Recent completed bookings (last 5) - only actually completed, not future scheduled
     $recentBookingsResult = $conn->query("
         SELECT rb.id, r.name as room_name, c.name as customer_name, rb.price, rb.finished_at
         FROM room_booking rb
         JOIN rooms r ON rb.room_id = r.id
         LEFT JOIN customers c ON rb.customer_id = c.id
-        WHERE rb.finished_at IS NOT NULL
+        WHERE rb.finished_at IS NOT NULL AND rb.finished_at <= NOW()
         ORDER BY rb.finished_at DESC
         LIMIT 5
     ");
@@ -4964,8 +5008,8 @@ function quickStartBooking(){
         $price_per_minute = (float)$room['hour_cost'] / 60;
         $calculated_price = round($price_per_minute * $total_minutes, 2);
     }
+$stmt = $conn->prepare("INSERT INTO room_booking (customer_id, room_id, started_at, finished_at, price, is_multi, discount) VALUES (?, ?, ?, ?, ?, 0, 0)");
     
-    $stmt = $conn->prepare("INSERT INTO room_booking (customer_id, room_id, started_at, finished_at, price) VALUES (?, ?, ?, ?, ?)");
     $stmt->bind_param("iissd", $customer_id, $room_id, $started_at, $finished_at, $calculated_price);
     $stmt->execute();
     $booking_id = $conn->insert_id;
@@ -5141,8 +5185,8 @@ function quickOrder(){
         $stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount, booking_id) VALUES (?, ?, ?, ?)");
         $stmt->bind_param("iddi", $customer_id, $totalPrice, $discount, $booking_id);
     } else {
-        $stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount) VALUES (?, ?, ?)");
-        $stmt->bind_param("idd", $customer_id, $totalPrice, $discount);
+$stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount, booking_id) VALUES (?, ?, ?, 0)");
+        $stmt->bind_param("iddi", $customer_id, $totalPrice, $discount, $booking_id);
     }
     $stmt->execute();
     $orderId = $conn->insert_id;
@@ -5551,6 +5595,7 @@ function getCurrentShift(){
         FROM room_booking 
         WHERE createdAt >= ? AND createdAt <= ?
         AND finished_at IS NOT NULL
+        AND finished_at <= NOW()
     ");
     $stmt->bind_param("ss", $started_at, $current_time);
     $stmt->execute();
@@ -5702,7 +5747,7 @@ function getShiftReport(){
     }
     $stmt->close();
     
-    // Get detailed booking breakdown
+    // Get detailed booking breakdown - only actually completed bookings
     $stmt = $conn->prepare("
         SELECT rb.*, r.name as room_name, c.name as customer_name, c.phone as customer_phone
         FROM room_booking rb
@@ -5710,6 +5755,7 @@ function getShiftReport(){
         LEFT JOIN customers c ON rb.customer_id = c.id
         WHERE rb.createdAt >= ? AND rb.createdAt <= ?
         AND rb.finished_at IS NOT NULL
+        AND rb.finished_at <= NOW()
         ORDER BY rb.createdAt ASC
     ");
     $stmt->bind_param("ss", $started_at, $ended_at);
@@ -5800,11 +5846,11 @@ function getDailyIncomeAnalysis(){
         $orderData = $orderStmt->get_result()->fetch_assoc();
         $orderStmt->close();
         
-        // Get bookings revenue during this shift
+        // Get bookings revenue during this shift - only actually completed bookings
         $bookingStmt = $conn->prepare("
             SELECT COALESCE(SUM(price), 0) as booking_revenue, COUNT(*) as booking_count
             FROM room_booking 
-            WHERE createdAt >= ? AND createdAt <= ? AND finished_at IS NOT NULL
+            WHERE createdAt >= ? AND createdAt <= ? AND finished_at IS NOT NULL AND finished_at <= NOW()
         ");
         $bookingStmt->bind_param("ss", $shiftStart, $shiftEnd);
         $bookingStmt->execute();
@@ -5850,7 +5896,7 @@ function getDailyIncomeAnalysis(){
     }
     $stmt->close();
     
-    // Get all room bookings for this date range
+    // Get all room bookings for this date range - only actually completed bookings
     $stmt = $conn->prepare("
         SELECT rb.*, r.name as room_name, r.ps, c.name as customer_name, c.phone as customer_phone
         FROM room_booking rb
@@ -5858,6 +5904,7 @@ function getDailyIncomeAnalysis(){
         LEFT JOIN customers c ON rb.customer_id = c.id
         WHERE DATE(rb.createdAt) BETWEEN ? AND ?
         AND rb.finished_at IS NOT NULL
+        AND rb.finished_at <= NOW()
         ORDER BY rb.createdAt ASC
     ");
     $stmt->bind_param("ss", $startDate, $endDate);
@@ -5971,14 +6018,14 @@ function getDailyIncomeAnalysis(){
     }
     $stmt->close();
     
-    // Fill in booking data
+    // Fill in booking data - only actually completed bookings
     $stmt = $conn->prepare("
         SELECT 
             HOUR(createdAt) as hour,
             COUNT(*) as count,
             COALESCE(SUM(price), 0) as revenue
         FROM room_booking
-        WHERE DATE(createdAt) BETWEEN ? AND ? AND finished_at IS NOT NULL
+        WHERE DATE(createdAt) BETWEEN ? AND ? AND finished_at IS NOT NULL AND finished_at <= NOW()
         GROUP BY HOUR(createdAt)
     ");
     $stmt->bind_param("ss", $startDate, $endDate);
@@ -6081,7 +6128,7 @@ function getPrintableDailyReport(){
             COUNT(*) as count,
             COALESCE(SUM(price), 0) as revenue
         FROM room_booking 
-        WHERE DATE(createdAt) = ? AND finished_at IS NOT NULL
+        WHERE DATE(createdAt) = ? AND finished_at IS NOT NULL AND finished_at <= NOW()
     ");
     $stmt->bind_param("s", $date);
     $stmt->execute();
