@@ -19,6 +19,36 @@
 */
 require_once 'config.php';
 
+// Whitelist of allowed actions - prevents arbitrary function execution
+$ALLOWED_ACTIONS = [
+    // Auth
+    'login', 'logout', 'validateSession',
+    // Shifts
+    'startShift', 'endShift', 'getCurrentShift', 'listShifts', 'getShiftReport',
+    // Admin management
+    'addAdmin', 'listAdmins', 'updateAdmin', 'deleteAdmin', 'adminAttendance', 'getMyAttendance',
+    // Profile
+    'getProfile', 'updateProfile', 'updatePassword',
+    // Customers
+    'addcustomer', 'listcustomers', 'deletecustomer', 'updatecustomer', 'getCustomer', 'searchCustomers', 'findCustomerByPhone', 'getCustomerLoyaltyInfo',
+    // Rooms
+    'addRoom', 'updateRoom', 'deleteRoom', 'listRooms', 'getRoom', 'getAvailableRooms', 'getRoomsStatus',
+    // Cafeteria items
+    'add_cafeteria_item', 'update_cafeteria_items', 'delete_cafeteria_items', 'list_cafeteria_items', 'get_cafeteria_item', 'getAvailableItems',
+    // Stock
+    'updateStock', 'addStock', 'getLowStockItems',
+    // Bookings
+    'addBooking', 'endBooking', 'updateBookingDiscount', 'listBookings', 'getActiveBookings', 'getBookingEndingAlerts', 'getBookings', 'getBooking',
+    'getUpcomingBookings', 'getTodaysBookings', 'quickStartBooking', 'deleteBooking', 'updateActiveBooking', 'switchRoom', 'timerUpdate',
+    // Orders
+    'addOrder', 'updateOrder', 'deleteOrder', 'deleteOrderItems', 'updateOrderItem', 'listOrders', 'getOrder', 'getTodaysOrders', 'quickOrder',
+    // Analytics
+    'getOrdersAnalytics', 'dashboardAnalyticsForSuperadmin', 'getFullOrdersAnalytics', 'getFullRoomAnalytics', 'getFullCafeteriaAnalytics',
+    'getFullCustomerAnalytics', 'getFullStaffAnalytics', 'getAdminPerformanceAnalytics', 'getFullRevenueAnalytics', 'getFullDashboardAnalytics',
+    // Dashboard & Reports
+    'getFrontDeskDashboard', 'getDailyIncomeAnalysis', 'getPrintableDailyReport', 'getMonthlyShiftSummary'
+];
+
 // Action routing
 if(!isset($_GET['action'])){
     respond('error', 'No action specified.');
@@ -26,8 +56,13 @@ if(!isset($_GET['action'])){
 
 $action = $_GET['action'];
 
+// Security: Only allow whitelisted actions
+if(!in_array($action, $ALLOWED_ACTIONS)){
+    respond('error', 'Invalid action.');
+}
+
 if(!function_exists($action)){
-    respond('error', 'Invalid action: ' . $action);
+    respond('error', 'Action not implemented.');
 }
 
 try {
@@ -594,6 +629,7 @@ function getMyAttendance(){
 
 function addcustomer(){
     global $conn;
+    $admin = getAdmin();
     $input = json_decode(file_get_contents('php://input'), true) ?? [];
     $name = isset($input['name']) ? $input['name'] : null;
     $phone = isset($input['phone']) ? $input['phone'] : null;
@@ -774,32 +810,32 @@ function getRoom(){
 
     // If superadmin, include analytics data
     if($admin['role'] == 'superadmin'){
-        // Total bookings count
-        $stmt = $conn->prepare("SELECT COUNT(*) as total_bookings FROM room_booking WHERE room_id = ?");
+        // Total bookings count (completed only)
+        $stmt = $conn->prepare("SELECT COUNT(*) as total_bookings FROM room_booking WHERE room_id = ? AND finished_at IS NOT NULL AND finished_at <= NOW()");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $result = $stmt->get_result();
         $bookingCount = $result->fetch_assoc();
         $stmt->close();
 
-        // Total revenue from this room
-        $stmt = $conn->prepare("SELECT COALESCE(SUM(price), 0) as total_revenue FROM room_booking WHERE room_id = ?");
+        // Total revenue from this room (completed bookings only)
+        $stmt = $conn->prepare("SELECT COALESCE(SUM(price), 0) as total_revenue FROM room_booking WHERE room_id = ? AND finished_at IS NOT NULL AND finished_at <= NOW()");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $result = $stmt->get_result();
         $revenueData = $result->fetch_assoc();
         $stmt->close();
 
-        // Average booking duration (in hours)
-        $stmt = $conn->prepare("SELECT AVG(TIMESTAMPDIFF(HOUR, started_at, finished_at)) as avg_duration_hours FROM room_booking WHERE room_id = ?");
+        // Average booking duration (in hours, completed bookings only)
+        $stmt = $conn->prepare("SELECT AVG(TIMESTAMPDIFF(HOUR, started_at, finished_at)) as avg_duration_hours FROM room_booking WHERE room_id = ? AND finished_at IS NOT NULL AND finished_at <= NOW()");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $result = $stmt->get_result();
         $avgDuration = $result->fetch_assoc();
         $stmt->close();
 
-        // Bookings this month
-        $stmt = $conn->prepare("SELECT COUNT(*) as bookings_this_month, COALESCE(SUM(price), 0) as revenue_this_month FROM room_booking WHERE room_id = ? AND MONTH(createdAt) = MONTH(CURRENT_DATE()) AND YEAR(createdAt) = YEAR(CURRENT_DATE())");
+        // Bookings this month (completed only)
+        $stmt = $conn->prepare("SELECT COUNT(*) as bookings_this_month, COALESCE(SUM(price), 0) as revenue_this_month FROM room_booking WHERE room_id = ? AND MONTH(createdAt) = MONTH(CURRENT_DATE()) AND YEAR(createdAt) = YEAR(CURRENT_DATE()) AND finished_at IS NOT NULL AND finished_at <= NOW()");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -817,8 +853,8 @@ function getRoom(){
         }
         $stmt->close();
 
-        // Unique customers who booked this room
-        $stmt = $conn->prepare("SELECT COUNT(DISTINCT customer_id) as unique_customers FROM room_booking WHERE room_id = ?");
+        // Unique customers who booked this room (completed bookings only)
+        $stmt = $conn->prepare("SELECT COUNT(DISTINCT customer_id) as unique_customers FROM room_booking WHERE room_id = ? AND finished_at IS NOT NULL AND finished_at <= NOW()");
         $stmt->bind_param("i", $id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -1899,7 +1935,10 @@ function getBookings(){
             $hours = $diff->h + ($diff->days * 24) + ($diff->i / 60);
             $row['current_duration_hours'] = round($hours, 2);
             $total_minutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
-            $price_per_minute = (float)$row['hour_cost'] / 60;
+            // Use appropriate hourly cost based on is_multi
+            $is_multi = isset($row['is_multi']) ? (int)$row['is_multi'] : 0;
+            $applicable_hour_cost = $is_multi ? (float)$row['multi_hour_cost'] : (float)$row['hour_cost'];
+            $price_per_minute = $applicable_hour_cost / 60;
             $row['estimated_price'] = round($price_per_minute * $total_minutes, 2);
         } else {
             $row['status'] = 'completed';
@@ -3011,26 +3050,27 @@ function getFullRoomAnalytics(){
     
     $dateFilterSimple = str_replace('rb.createdAt', 'createdAt', $dateFilter);
     
-    // Summary stats
+    // Summary stats - only count completed bookings for revenue (finished_at IS NOT NULL)
     $summaryResult = $conn->query("
         SELECT 
             COUNT(*) as total_bookings,
-            COALESCE(SUM(price), 0) as total_revenue,
-            COALESCE(AVG(price), 0) as avg_booking_value,
-            COALESCE(AVG(TIMESTAMPDIFF(MINUTE, started_at, finished_at)), 0) as avg_duration_minutes,
-            COUNT(CASE WHEN finished_at IS NULL THEN 1 END) as active_sessions
+            COALESCE(SUM(CASE WHEN finished_at IS NOT NULL THEN price ELSE 0 END), 0) as total_revenue,
+            COALESCE(AVG(CASE WHEN finished_at IS NOT NULL THEN price ELSE NULL END), 0) as avg_booking_value,
+            COALESCE(AVG(CASE WHEN finished_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, started_at, finished_at) ELSE NULL END), 0) as avg_duration_minutes,
+            COUNT(CASE WHEN finished_at IS NULL THEN 1 END) as active_sessions,
+            COUNT(CASE WHEN finished_at IS NOT NULL THEN 1 END) as completed_bookings
         FROM room_booking $dateFilterSimple
     ");
     $summary = $summaryResult->fetch_assoc();
     
-    // Room performance
+    // Room performance - only count completed bookings for revenue
     $roomPerformanceResult = $conn->query("
         SELECT 
             r.id, r.name, r.ps, r.hour_cost, r.capacity,
             COUNT(rb.id) as booking_count,
-            COALESCE(SUM(rb.price), 0) as total_revenue,
-            COALESCE(AVG(rb.price), 0) as avg_booking_value,
-            COALESCE(AVG(TIMESTAMPDIFF(MINUTE, rb.started_at, rb.finished_at)), 0) as avg_duration_minutes,
+            COALESCE(SUM(CASE WHEN rb.finished_at IS NOT NULL THEN rb.price ELSE 0 END), 0) as total_revenue,
+            COALESCE(AVG(CASE WHEN rb.finished_at IS NOT NULL THEN rb.price ELSE NULL END), 0) as avg_booking_value,
+            COALESCE(AVG(CASE WHEN rb.finished_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, rb.started_at, rb.finished_at) ELSE NULL END), 0) as avg_duration_minutes,
             COUNT(DISTINCT rb.customer_id) as unique_customers
         FROM rooms r
         LEFT JOIN room_booking rb ON r.id = rb.room_id " . ($dateFilter ? "AND " . str_replace(" WHERE ", "", $dateFilter) : "") . "
@@ -3170,6 +3210,7 @@ function getFullRoomAnalytics(){
         ],
         'summary' => [
             'total_bookings' => (int)$summary['total_bookings'],
+            'completed_bookings' => (int)$summary['completed_bookings'],
             'total_revenue' => (float)$summary['total_revenue'],
             'avg_booking_value' => (float)$summary['avg_booking_value'],
             'avg_duration_hours' => round((float)$summary['avg_duration_minutes'] / 60, 2),
@@ -3803,15 +3844,19 @@ function getFullRevenueAnalytics(){
     // Build date filters
     $orderDateFilter = "";
     $bookingDateFilter = "";
+    $bookingCompletedFilter = " WHERE finished_at IS NOT NULL"; // Only count completed bookings for revenue
     if($startDate && $endDate){
         $orderDateFilter = " WHERE DATE(created_at) BETWEEN '$startDate' AND '$endDate'";
         $bookingDateFilter = " WHERE DATE(createdAt) BETWEEN '$startDate' AND '$endDate'";
+        $bookingCompletedFilter = " WHERE finished_at IS NOT NULL AND DATE(createdAt) BETWEEN '$startDate' AND '$endDate'";
     } elseif($startDate){
         $orderDateFilter = " WHERE DATE(created_at) >= '$startDate'";
         $bookingDateFilter = " WHERE DATE(createdAt) >= '$startDate'";
+        $bookingCompletedFilter = " WHERE finished_at IS NOT NULL AND DATE(createdAt) >= '$startDate'";
     } elseif($endDate){
         $orderDateFilter = " WHERE DATE(created_at) <= '$endDate'";
         $bookingDateFilter = " WHERE DATE(createdAt) <= '$endDate'";
+        $bookingCompletedFilter = " WHERE finished_at IS NOT NULL AND DATE(createdAt) <= '$endDate'";
     }
     
     // Order revenue
@@ -3824,12 +3869,12 @@ function getFullRevenueAnalytics(){
     ");
     $orderRevenue = $orderRevenueResult->fetch_assoc();
     
-    // Booking revenue
+    // Booking revenue - only count completed bookings (finished_at IS NOT NULL)
     $bookingRevenueResult = $conn->query("
         SELECT 
             COALESCE(SUM(price), 0) as revenue,
             COUNT(*) as count
-        FROM room_booking $bookingDateFilter
+        FROM room_booking $bookingCompletedFilter
     ");
     $bookingRevenue = $bookingRevenueResult->fetch_assoc();
     
@@ -3843,7 +3888,7 @@ function getFullRevenueAnalytics(){
     $orderCostResult = $conn->query($orderCostQuery);
     $orderCost = $orderCostResult->fetch_assoc();
     
-    // Daily combined revenue
+    // Daily combined revenue - only count completed bookings for booking revenue
     $dailyRevenueResult = $conn->query("
         SELECT date, SUM(order_revenue) as order_revenue, SUM(booking_revenue) as booking_revenue, 
                SUM(order_revenue) + SUM(booking_revenue) as total_revenue
@@ -3853,7 +3898,7 @@ function getFullRevenueAnalytics(){
             GROUP BY DATE(created_at)
             UNION ALL
             SELECT DATE(createdAt) as date, 0 as order_revenue, SUM(price) as booking_revenue
-            FROM room_booking $bookingDateFilter
+            FROM room_booking $bookingCompletedFilter
             GROUP BY DATE(createdAt)
         ) combined
         GROUP BY date
@@ -3864,7 +3909,7 @@ function getFullRevenueAnalytics(){
         $dailyRevenue[] = $row;
     }
     
-    // Monthly combined revenue
+    // Monthly combined revenue - only count completed bookings for booking revenue
     $monthlyRevenueResult = $conn->query("
         SELECT month, month_name, SUM(order_revenue) as order_revenue, SUM(booking_revenue) as booking_revenue,
                SUM(order_revenue) + SUM(booking_revenue) as total_revenue
@@ -3876,7 +3921,7 @@ function getFullRevenueAnalytics(){
             UNION ALL
             SELECT MONTH(createdAt) as month, MONTHNAME(createdAt) as month_name,
                    0 as order_revenue, SUM(price) as booking_revenue
-            FROM room_booking $bookingDateFilter
+            FROM room_booking $bookingCompletedFilter
             GROUP BY MONTH(createdAt), MONTHNAME(createdAt)
         ) combined
         GROUP BY month, month_name
@@ -4153,7 +4198,7 @@ function getBooking(){
     $id = (int)$input['id'];
     
     $stmt = $conn->prepare("
-        SELECT rb.*, r.name as room_name, r.ps, r.hour_cost, c.name as customer_name, c.phone as customer_phone
+        SELECT rb.*, r.name as room_name, r.ps, r.hour_cost, r.multi_hour_cost, c.name as customer_name, c.phone as customer_phone
         FROM room_booking rb
         JOIN rooms r ON rb.room_id = r.id
         LEFT JOIN customers c ON rb.customer_id = c.id
@@ -4177,7 +4222,10 @@ function getBooking(){
         $hours = $diff->h + ($diff->days * 24) + ($diff->i / 60);
         $booking['current_duration_hours'] = round($hours, 2);
         $total_minutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
-        $price_per_minute = (float)$booking['hour_cost'] / 60;
+        // Use multi_hour_cost if is_multi is set, otherwise use hour_cost
+        $is_multi = isset($booking['is_multi']) ? (int)$booking['is_multi'] : 0;
+        $applicable_hour_cost = $is_multi ? (float)$booking['multi_hour_cost'] : (float)$booking['hour_cost'];
+        $price_per_minute = $applicable_hour_cost / 60;
         $booking['estimated_price'] = round($price_per_minute * $total_minutes, 2);
         $booking['is_active'] = true;
     } else {
@@ -4189,15 +4237,13 @@ function getBooking(){
 
 /**
  * Cancel/delete a booking (only if not started or superadmin)
- */
-function cancelBooking(){
+ */function cancelBooking(){
     global $conn;
     $admin = getAdmin();
     
     $input = requireParams(['id']);
     $id = (int)$input['id'];
     
-    // Get booking
     $stmt = $conn->prepare("SELECT * FROM room_booking WHERE id = ?");
     $stmt->bind_param("i", $id);
     $stmt->execute();
@@ -4208,29 +4254,20 @@ function cancelBooking(){
     if(!$booking){
         respond('error', 'Booking not found.');
     }
-    
-    // Only superadmin can delete actually completed bookings
-    // A booking is "completed" if finished_at is set AND finished_at <= NOW()
-    // Scheduled bookings have finished_at set but may not have actually completed yet
-    $isActuallyCompleted = ($booking['finished_at'] !== null && strtotime($booking['finished_at']) <= time());
-    
-    if($isActuallyCompleted && $admin['role'] != 'superadmin'){
-        respond('error', 'Cannot cancel completed bookings.');
+
+    // Only superadmin can cancel. Regular admin cannot cancel any booking.
+    // This prevents abuse while ensuring superadmin can always clean up.
+    if($admin['role'] != 'superadmin'){
+        respond('error', 'Unauthorized. Only superadmin can cancel bookings.');
     }
     
-    // Free the room if booking was active
-    // This includes: open sessions (finished_at === null) OR active scheduled bookings (started_at <= NOW)
-    $isActiveBooking = ($booking['finished_at'] === null) || 
-                       ($booking['started_at'] !== null && strtotime($booking['started_at']) <= time());
+    // Free the room
+    $stmt = $conn->prepare("UPDATE rooms SET is_booked = 0 WHERE id = ?");
+    $stmt->bind_param("i", $booking['room_id']);
+    $stmt->execute();
+    $stmt->close();
     
-    if($isActiveBooking){
-        $stmt = $conn->prepare("UPDATE rooms SET is_booked = 0 WHERE id = ?");
-        $stmt->bind_param("i", $booking['room_id']);
-        $stmt->execute();
-        $stmt->close();
-    }
-    
-    // Delete booking
+    // Delete booking — removing from DB means it never appears in analytics
     $stmt = $conn->prepare("DELETE FROM room_booking WHERE id = ?");
     $stmt->bind_param("i", $id);
     $stmt->execute();
@@ -4647,7 +4684,7 @@ function getTodaysBookings(){
     getAdmin();
     
     $result = $conn->query("
-        SELECT rb.*, r.name as room_name, r.ps, r.hour_cost, c.name as customer_name, c.phone as customer_phone
+        SELECT rb.*, r.name as room_name, r.ps, r.hour_cost, r.multi_hour_cost, c.name as customer_name, c.phone as customer_phone
         FROM room_booking rb
         JOIN rooms r ON rb.room_id = r.id
         LEFT JOIN customers c ON rb.customer_id = c.id
@@ -4713,7 +4750,10 @@ function getTodaysBookings(){
             $hours = $diff->h + ($diff->days * 24) + ($diff->i / 60);
             $row['current_duration_hours'] = round($hours, 2);
             $total_minutes = ($diff->days * 24 * 60) + ($diff->h * 60) + $diff->i;
-            $price_per_minute = (float)$row['hour_cost'] / 60;
+            // Use multi_hour_cost if is_multi is set, otherwise use hour_cost
+            $is_multi = isset($row['is_multi']) ? (int)$row['is_multi'] : 0;
+            $applicable_hour_cost = $is_multi ? (float)$row['multi_hour_cost'] : (float)$row['hour_cost'];
+            $price_per_minute = $applicable_hour_cost / 60;
             $row['estimated_price'] = round($price_per_minute * $total_minutes, 2);
         } else {
             $row['status'] = 'completed';
@@ -5185,8 +5225,8 @@ function quickOrder(){
         $stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount, booking_id) VALUES (?, ?, ?, ?)");
         $stmt->bind_param("iddi", $customer_id, $totalPrice, $discount, $booking_id);
     } else {
-$stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount, booking_id) VALUES (?, ?, ?, 0)");
-        $stmt->bind_param("iddi", $customer_id, $totalPrice, $discount, $booking_id);
+        $stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount, booking_id) VALUES (?, ?, ?, 0)");
+        $stmt->bind_param("idd", $customer_id, $totalPrice, $discount);
     }
     $stmt->execute();
     $orderId = $conn->insert_id;
@@ -5224,7 +5264,12 @@ $stmt = $conn->prepare("INSERT INTO orders (customer_id, price, discount, bookin
 }
 function deleteBooking(){
     global $conn;
-    getAdmin();
+    $admin = getAdmin();
+    
+    // Only superadmin can delete bookings
+    if($admin['role'] != 'superadmin'){
+        respond('error', 'Unauthorized. Only superadmin can delete bookings.');
+    }
     
     $input = requireParams(['booking_id']);
     $booking_id = (int)$input['booking_id'];
@@ -5255,7 +5300,6 @@ function deleteBooking(){
     // Restock items from all orders and delete order_items
     $restockedItems = [];
     foreach($orderIds as $order_id){
-        // Get order items
         $stmt = $conn->prepare("SELECT item_id, quantity FROM order_items WHERE order_id = ?");
         $stmt->bind_param("i", $order_id);
         $stmt->execute();
@@ -5265,13 +5309,11 @@ function deleteBooking(){
             $item_id = (int)$item['item_id'];
             $quantity = (int)$item['quantity'];
             
-            // Restock the item
             $updateStmt = $conn->prepare("UPDATE cafeteria_items SET stock = stock + ? WHERE id = ?");
             $updateStmt->bind_param("ii", $quantity, $item_id);
             $updateStmt->execute();
             $updateStmt->close();
             
-            // Track restocked items
             if(!isset($restockedItems[$item_id])){
                 $restockedItems[$item_id] = 0;
             }
@@ -5279,7 +5321,6 @@ function deleteBooking(){
         }
         $stmt->close();
         
-        // Delete order items for this order
         $stmt = $conn->prepare("DELETE FROM order_items WHERE order_id = ?");
         $stmt->bind_param("i", $order_id);
         $stmt->execute();
@@ -5294,13 +5335,13 @@ function deleteBooking(){
         $stmt->close();
     }
     
-    // Delete booking
+    // Delete booking — removed from DB means never appears in analytics
     $stmt = $conn->prepare("DELETE FROM room_booking WHERE id = ?");
     $stmt->bind_param("i", $booking_id);
     $stmt->execute();
     $stmt->close();
     
-    // Free room if it was booked
+    // Free the room
     if($booking['room_id']){
         $stmt = $conn->prepare("UPDATE rooms SET is_booked = 0 WHERE id = ?");
         $stmt->bind_param("i", $booking['room_id']);
@@ -5516,12 +5557,20 @@ function timerUpdate(){
     $stmt->bind_param("si", $new_finished_at, $booking_id);
     $stmt->execute();
     $stmt->close();
-    //make is booked to 0 in rooms table
+    
+    // Only free the room if the booking is actually ending (finished_at is now or in the past)
     $room_id = $booking['room_id'];
-    $stmt = $conn->prepare("UPDATE rooms SET is_booked = 0 WHERE id = ?");
-    $stmt->bind_param("i", $room_id);
-    $stmt->execute();
-    $stmt->close();
+    $finished_time = new DateTime($new_finished_at);
+    $now = new DateTime();
+    
+    if($finished_time <= $now){
+        // Booking is ending now - free the room
+        $stmt = $conn->prepare("UPDATE rooms SET is_booked = 0 WHERE id = ?");
+        $stmt->bind_param("i", $room_id);
+        $stmt->execute();
+        $stmt->close();
+    }
+    // If finished_at is in the future, room remains booked
     
     respond('success', 'Booking timer updated successfully.');
 }
