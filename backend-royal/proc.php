@@ -4152,6 +4152,31 @@ function getAdminDashboard()
              LEFT JOIN tables t ON o.table_id = t.id
              ORDER BY o.created_at DESC LIMIT 5"
         )->fetch_all(MYSQLI_ASSOC);
+    } elseif ($admin['role'] === 'kitchen') {
+        // Kitchen sees today's done orders with their items
+        $stmtR = $conn->prepare(
+            "SELECT o.id, o.order_type, o.status, o.total, o.created_at, t.table_number
+             FROM orders o
+             LEFT JOIN tables t ON o.table_id = t.id
+             WHERE o.status = 'done' AND DATE(o.created_at) = ?
+             ORDER BY o.created_at DESC LIMIT 10"
+        );
+        $stmtR->bind_param("s", $today);
+        $stmtR->execute();
+        $recentOrders = $stmtR->get_result()->fetch_all(MYSQLI_ASSOC);
+        // Attach items to each order
+        foreach ($recentOrders as &$order) {
+            $stmtItems = $conn->prepare(
+                "SELECT oi.quantity, p.name as product_name
+                 FROM order_items oi
+                 JOIN products p ON oi.product_id = p.id
+                 WHERE oi.order_id = ?"
+            );
+            $stmtItems->bind_param("i", $order['id']);
+            $stmtItems->execute();
+            $order['items'] = $stmtItems->get_result()->fetch_all(MYSQLI_ASSOC);
+        }
+        unset($order);
     } else {
         $stmtR = $conn->prepare(
             "SELECT o.id, o.order_type, o.status, o.total, o.created_at, t.table_number

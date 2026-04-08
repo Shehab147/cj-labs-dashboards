@@ -123,68 +123,72 @@ const AdminDashboard = () => {
         </Card>
       </Grid>
 
-      {/* Stats Cards */}
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-        <Card>
-          <CardContent className='flex flex-col items-center gap-2 p-6'>
-            <CustomAvatar variant='rounded' color='primary' skin='light' size={48}>
-              <i className='tabler-receipt text-2xl' />
-            </CustomAvatar>
-            <Typography variant='h4'>{today.orders || 0}</Typography>
-            <Typography variant='body2' color='text.secondary'>{t.dashboard.todaysOrders}</Typography>
-            {comparison.orders_change_percent !== undefined && comparison.orders_change_percent !== 0 && (
-              <Chip
-                label={`${comparison.orders_change_percent > 0 ? '+' : ''}${comparison.orders_change_percent}%`}
-                size='small'
-                color={comparison.orders_change_percent >= 0 ? 'success' : 'error'}
-              />
-            )}
-          </CardContent>
-        </Card>
-      </Grid>
+      {/* Stats Cards - hidden for kitchen users */}
+      {!isKitchen && (
+        <>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card>
+              <CardContent className='flex flex-col items-center gap-2 p-6'>
+                <CustomAvatar variant='rounded' color='primary' skin='light' size={48}>
+                  <i className='tabler-receipt text-2xl' />
+                </CustomAvatar>
+                <Typography variant='h4'>{today.orders || 0}</Typography>
+                <Typography variant='body2' color='text.secondary'>{t.dashboard.todaysOrders}</Typography>
+                {comparison.orders_change_percent !== undefined && comparison.orders_change_percent !== 0 && (
+                  <Chip
+                    label={`${comparison.orders_change_percent > 0 ? '+' : ''}${comparison.orders_change_percent}%`}
+                    size='small'
+                    color={comparison.orders_change_percent >= 0 ? 'success' : 'error'}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
 
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-        <Card>
-          <CardContent className='flex flex-col items-center gap-2 p-6'>
-            <CustomAvatar variant='rounded' color='success' skin='light' size={48}>
-              <i className='tabler-currency-dollar text-2xl' />
-            </CustomAvatar>
-            <Typography variant='h4'>{(today.revenue || 0).toFixed(2)}</Typography>
-            <Typography variant='body2' color='text.secondary'>{t.dashboard.todaysRevenue}</Typography>
-            {comparison.revenue_change_percent !== undefined && comparison.revenue_change_percent !== 0 && (
-              <Chip
-                label={`${comparison.revenue_change_percent > 0 ? '+' : ''}${comparison.revenue_change_percent}%`}
-                size='small'
-                color={comparison.revenue_change_percent >= 0 ? 'success' : 'error'}
-              />
-            )}
-          </CardContent>
-        </Card>
-      </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card>
+              <CardContent className='flex flex-col items-center gap-2 p-6'>
+                <CustomAvatar variant='rounded' color='success' skin='light' size={48}>
+                  <i className='tabler-currency-dollar text-2xl' />
+                </CustomAvatar>
+                <Typography variant='h4'>{(today.revenue || 0).toFixed(2)}</Typography>
+                <Typography variant='body2' color='text.secondary'>{t.dashboard.todaysRevenue}</Typography>
+                {comparison.revenue_change_percent !== undefined && comparison.revenue_change_percent !== 0 && (
+                  <Chip
+                    label={`${comparison.revenue_change_percent > 0 ? '+' : ''}${comparison.revenue_change_percent}%`}
+                    size='small'
+                    color={comparison.revenue_change_percent >= 0 ? 'success' : 'error'}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
 
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-        <Card>
-          <CardContent className='flex flex-col items-center gap-2 p-6'>
-            <CustomAvatar variant='rounded' color='warning' skin='light' size={48}>
-              <i className='tabler-clock text-2xl' />
-            </CustomAvatar>
-            <Typography variant='h4'>{dashboardData?.active_shifts_count || 0}</Typography>
-            <Typography variant='body2' color='text.secondary'>{t.dashboard.activeShifts}</Typography>
-          </CardContent>
-        </Card>
-      </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card>
+              <CardContent className='flex flex-col items-center gap-2 p-6'>
+                <CustomAvatar variant='rounded' color='warning' skin='light' size={48}>
+                  <i className='tabler-clock text-2xl' />
+                </CustomAvatar>
+                <Typography variant='h4'>{dashboardData?.active_shifts_count || 0}</Typography>
+                <Typography variant='body2' color='text.secondary'>{t.dashboard.activeShifts}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
 
-      <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-        <Card>
-          <CardContent className='flex flex-col items-center gap-2 p-6'>
-            <CustomAvatar variant='rounded' color='info' skin='light' size={48}>
-              <i className='tabler-soup text-2xl' />
-            </CustomAvatar>
-            <Typography variant='h4'>{today.active_orders || 0}</Typography>
-            <Typography variant='body2' color='text.secondary'>{t.dashboard.activeOrders}</Typography>
-          </CardContent>
-        </Card>
-      </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Card>
+              <CardContent className='flex flex-col items-center gap-2 p-6'>
+                <CustomAvatar variant='rounded' color='info' skin='light' size={48}>
+                  <i className='tabler-soup text-2xl' />
+                </CustomAvatar>
+                <Typography variant='h4'>{today.active_orders || 0}</Typography>
+                <Typography variant='body2' color='text.secondary'>{t.dashboard.activeOrders}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </>
+      )}
 
       {/* Low Stock Alert */}
       {(isAdmin || isKitchen) && lowStock.length > 0 && (
@@ -203,23 +207,32 @@ const AdminDashboard = () => {
       {/* Recent Orders */}
       <Grid size={{ xs: 12, md: isAdmin ? 8 : 12 }}>
         <Card>
-          <CardHeader title={t.dashboard.recentOrders} />
+          <CardHeader title={isKitchen ? t.dashboard.completedOrders : t.dashboard.recentOrders} />
           <Divider />
           <TableContainer>
             <Table>
               <TableHead>
                 <TableRow>
                   <TableCell>{t.dashboard.tableId}</TableCell>
-                  <TableCell>{t.dashboard.tableType}</TableCell>
-                  <TableCell>{t.dashboard.tableStatus}</TableCell>
-                  <TableCell>{t.dashboard.tableTotal}</TableCell>
-                  <TableCell>{t.dashboard.tablePayment}</TableCell>
+                  {isKitchen ? (
+                    <>
+                      <TableCell>{t.dashboard.tableItems}</TableCell>
+                      <TableCell>{t.dashboard.tableDate}</TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell>{t.dashboard.tableType}</TableCell>
+                      <TableCell>{t.dashboard.tableStatus}</TableCell>
+                      <TableCell>{t.dashboard.tableTotal}</TableCell>
+                      <TableCell>{t.dashboard.tablePayment}</TableCell>
+                    </>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {recentOrders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} align='center'>
+                    <TableCell colSpan={isKitchen ? 3 : 5} align='center'>
                       <Typography variant='body2' color='text.secondary'>{t.dashboard.noOrdersYet}</Typography>
                     </TableCell>
                   </TableRow>
@@ -227,32 +240,55 @@ const AdminDashboard = () => {
                   recentOrders.map((order: any) => (
                     <TableRow key={order.id}>
                       <TableCell>#{order.id}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={order.order_type}
-                          size='small'
-                          color={order.order_type === 'dine_in' ? 'primary' : order.order_type === 'takeaway' ? 'info' : 'warning'}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={order.status}
-                          size='small'
-                          color={
-                            order.status === 'done' ? 'success' :
-                            order.status === 'preparing' ? 'warning' :
-                            order.status === 'cancelled' ? 'error' : 'default'
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>{parseFloat(order.total || order.total_price || 0).toFixed(2)}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={order.payment_status || 'unpaid'}
-                          size='small'
-                          color={order.payment_status === 'paid' ? 'success' : 'default'}
-                        />
-                      </TableCell>
+                      {isKitchen ? (
+                        <>
+                          <TableCell>
+                            {order.items && order.items.length > 0 ? (
+                              order.items.map((item: any, idx: number) => (
+                                <Typography key={idx} variant='caption' display='block' color='text.secondary'>
+                                  {item.product_name} ×{item.quantity}
+                                </Typography>
+                              ))
+                            ) : (
+                              <Typography variant='caption' color='text.disabled'>—</Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant='caption' color='text.secondary'>
+                              {order.created_at ? new Date(order.created_at).toLocaleTimeString() : '-'}
+                            </Typography>
+                          </TableCell>
+                        </>
+                      ) : (
+                        <>
+                          <TableCell>
+                            <Chip
+                              label={order.order_type}
+                              size='small'
+                              color={order.order_type === 'dine_in' ? 'primary' : order.order_type === 'takeaway' ? 'info' : 'warning'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={order.status}
+                              size='small'
+                              color={
+                                order.status === 'done' ? 'success' :
+                                order.status === 'preparing' ? 'warning' :
+                                order.status === 'cancelled' ? 'error' : 'default'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>{parseFloat(order.total || order.total_price || 0).toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={order.payment_status || 'unpaid'}
+                              size='small'
+                              color={order.payment_status === 'paid' ? 'success' : 'default'}
+                            />
+                          </TableCell>
+                        </>
+                      )}
                     </TableRow>
                   ))
                 )}
@@ -281,7 +317,7 @@ const AdminDashboard = () => {
                         <i className='tabler-user text-lg' />
                       </CustomAvatar>
                       <div>
-                        <Typography variant='subtitle2'>{shift.user_name || `User #${shift.user_id}`}</Typography>
+                        <Typography variant='subtitle2'>{shift.cashier_name || shift.user_name || `User #${shift.user_id || shift.id}`}</Typography>
                         <Typography variant='caption' color='text.secondary'>
                           {t.dashboard.since} {shift.start_time ? new Date(shift.start_time).toLocaleTimeString() : 'N/A'}
                         </Typography>

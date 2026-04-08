@@ -178,19 +178,32 @@ const KitchenLogs = () => {
       </Grid>
 
       {/* Add Log Dialog */}
-      <Dialog open={addLogOpen} onClose={() => setAddLogOpen(false)} maxWidth='xs' fullWidth>
+      <Dialog
+        open={addLogOpen}
+        onClose={() => setAddLogOpen(false)}
+        maxWidth='sm'
+        fullWidth
+        sx={{ '& .MuiDialog-paper': { minHeight: 380 } }}
+      >
         <DialogTitle>{t.kitchenLogs.dialogTitle}</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 4, pt: '1rem !important', overflow: 'visible' }}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 4, pt: '1rem !important' }}>
           <TextField
             select
             label={t.kitchenLogs.labelProduct}
             value={productId}
             onChange={e => setProductId(e.target.value)}
             fullWidth
-            slotProps={{ select: { MenuProps: { disablePortal: false, PaperProps: { style: { maxHeight: 200 } } } } }}
+            slotProps={{
+              select: {
+                MenuProps: {
+                  PaperProps: { style: { maxHeight: 400 } },
+                  slotProps: { paper: { style: { maxHeight: 400 } } }
+                }
+              }
+            }}
           >
             {products.map((p: any) => (
-              <MenuItem key={p.id} value={p.id.toString()}>{p.name}</MenuItem>
+              <MenuItem key={p.id} value={p.id.toString()} sx={{ minHeight: 48, fontSize: '1rem' }}>{p.name}</MenuItem>
             ))}
           </TextField>
           <TextField

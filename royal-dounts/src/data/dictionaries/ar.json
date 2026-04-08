@@ -134,7 +134,10 @@
     "tableType": "النوع",
     "tableStatus": "الحالة",
     "tableTotal": "الإجمالي",
-    "tablePayment": "الدفع"
+    "tablePayment": "الدفع",
+    "completedOrders": "الطلبات المكتملة اليوم",
+    "tableItems": "الأصناف",
+    "tableDate": "الوقت"
   },
   "users": {
     "title": "إدارة المستخدمين",

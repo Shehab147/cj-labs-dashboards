@@ -134,7 +134,10 @@
     "tableType": "Type",
     "tableStatus": "Status",
     "tableTotal": "Total",
-    "tablePayment": "Payment"
+    "tablePayment": "Payment",
+    "completedOrders": "Completed Orders Today",
+    "tableItems": "Items",
+    "tableDate": "Time"
   },
   "users": {
     "title": "Users Management",
