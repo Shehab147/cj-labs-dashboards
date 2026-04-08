@@ -46,7 +46,7 @@ const VerticalMenu = ({ dictionary, scrollMenu }: Props) => {
   // Hooks
   const theme = useTheme()
   const verticalNavOptions = useVerticalNav()
-  const { isSuperadmin } = useAuth()
+  const { isAdmin, isCashier, isKitchen } = useAuth()
   const params = useParams()
   const lang = params.lang as string
 
@@ -77,73 +77,94 @@ const VerticalMenu = ({ dictionary, scrollMenu }: Props) => {
         renderExpandedMenuItemIcon={{ icon: <i className='tabler-circle text-xs' /> }}
         menuSectionStyles={menuSectionStyles(verticalNavOptions, theme)}
       >
-        {/* Main */}
+        {/* Main - All roles */}
         <MenuSection label={nav.main}>
           <MenuItem href={`/${lang}/dashboard`} icon={<i className='tabler-smart-home' />}>
             {nav.dashboard}
           </MenuItem>
-          <MenuItem 
-            href={`/${lang}/front-desk`} 
-            icon={<i className='tabler-device-desktop' />}
-            className='bg-primary/5 border-l-4 border-primary'
-          >
-            <div className='flex items-center justify-between w-full'>
-              <span>{nav.frontDesk}</span>
-              <Chip label='Quick' size='small' color='primary' className='ml-2' />
-            </div>
-          </MenuItem>
-        </MenuSection>
-
-        {/* Room Management */}
-        <MenuSection label={nav.roomManagement}>
-          <SubMenu label={nav.rooms} icon={<i className='tabler-door' />}>
-            <MenuItem href={`/${lang}/rooms/list`} icon={<i className='tabler-list' />}>
-              {nav.roomsList}
+          {(isAdmin || isCashier) && (
+            <MenuItem
+              href={`/${lang}/pos`}
+              icon={<i className='tabler-cash-register' />}
+              className='bg-primary/5 border-l-4 border-primary'
+            >
+              <div className='flex items-center justify-between w-full'>
+                <span>{nav.pos}</span>
+                <Chip label='POS' size='small' color='primary' className='ml-2' />
+              </div>
             </MenuItem>
-            <MenuItem href={`/${lang}/rooms/status`} icon={<i className='tabler-chart-dots' />}>
-              {nav.roomsStatus}
+          )}
+        </MenuSection>
+
+        {/* Kitchen - Kitchen role & Admin */}
+        {(isAdmin || isKitchen) && (
+          <MenuSection label={nav.kitchen}>
+            <MenuItem href={`/${lang}/kitchen`} icon={<i className='tabler-chef-hat' />}>
+              {nav.kitchenOrders}
             </MenuItem>
-          </SubMenu>
-          <MenuItem href={`/${lang}/bookings`} icon={<i className='tabler-calendar-event' />}>
-            {nav.bookings}
-          </MenuItem>
-        </MenuSection>
+            <MenuItem href={`/${lang}/kitchen/logs`} icon={<i className='tabler-clipboard-list' />}>
+              {nav.kitchenLogs}
+            </MenuItem>
+          </MenuSection>
+        )}
 
-        {/* Customer & Orders */}
-        <MenuSection label={nav.customerOrders}>
-          <MenuItem href={`/${lang}/customers`} icon={<i className='tabler-users' />}>
-            {nav.customers}
-          </MenuItem>
-          <MenuItem href={`/${lang}/cafeteria`} icon={<i className='tabler-coffee' />}>
-            {nav.cafeteria}
-          </MenuItem>
-          <MenuItem href={`/${lang}/orders`} icon={<i className='tabler-receipt' />}>
-            {nav.orders}
-          </MenuItem>
-        </MenuSection>
+        {/* Orders - Admin & Cashier */}
+        {(isAdmin || isCashier) && (
+          <MenuSection label={nav.orderManagement}>
+            <MenuItem href={`/${lang}/orders`} icon={<i className='tabler-receipt' />}>
+              {nav.orders}
+            </MenuItem>
+            {isAdmin && (
+              <MenuItem href={`/${lang}/refunds`} icon={<i className='tabler-receipt-refund' />}>
+                {nav.refunds}
+              </MenuItem>
+            )}
+          </MenuSection>
+        )}
 
-        {/* Superadmin Only - Analytics & Management */}
-        {isSuperadmin && (
+        {/* Shop Management - Admin only */}
+        {isAdmin && (
+          <MenuSection label={nav.shopManagement}>
+            <MenuItem href={`/${lang}/products`} icon={<i className='tabler-cookie' />}>
+              {nav.products}
+            </MenuItem>
+            <MenuItem href={`/${lang}/categories`} icon={<i className='tabler-category' />}>
+              {nav.categories}
+            </MenuItem>
+            <MenuItem href={`/${lang}/tables`} icon={<i className='tabler-armchair' />}>
+              {nav.tables}
+            </MenuItem>
+            <MenuItem href={`/${lang}/inventory`} icon={<i className='tabler-packages' />}>
+              {nav.inventory}
+            </MenuItem>
+          </MenuSection>
+        )}
+
+        {/* Analytics & Management - Admin only */}
+        {isAdmin && (
           <>
             <MenuSection label={nav.analytics}>
               <SubMenu label={nav.analytics} icon={<i className='tabler-chart-bar' />}>
                 <MenuItem href={`/${lang}/analytics`} icon={<i className='tabler-dashboard' />}>
-                  {nav.dashboard || 'Dashboard'}
+                  {nav.overview}
                 </MenuItem>
-                <MenuItem href={`/${lang}/analytics/daily-income`} icon={<i className='tabler-report-money' />}>
-                  {nav.dailyIncome}
+                <MenuItem href={`/${lang}/analytics/sales`} icon={<i className='tabler-report-money' />}>
+                  {nav.salesAnalytics}
                 </MenuItem>
-                <MenuItem href={`/${lang}/analytics/rooms`} icon={<i className='tabler-door' />}>
-                  {nav.roomAnalytics}
+                <MenuItem href={`/${lang}/analytics/top-products`} icon={<i className='tabler-trophy' />}>
+                  {nav.topProducts}
                 </MenuItem>
-                <MenuItem href={`/${lang}/analytics/staff`} icon={<i className='tabler-user-check' />}>
-                  {nav.staffAnalytics}
+                <MenuItem href={`/${lang}/analytics/cashier-performance`} icon={<i className='tabler-user-check' />}>
+                  {nav.cashierPerformance}
                 </MenuItem>
               </SubMenu>
+              <MenuItem href={`/${lang}/shifts`} icon={<i className='tabler-clock' />}>
+                {nav.shifts}
+              </MenuItem>
             </MenuSection>
             <MenuSection label={nav.management}>
-              <MenuItem href={`/${lang}/admins`} icon={<i className='tabler-user-cog' />}>
-                {nav.admins}
+              <MenuItem href={`/${lang}/users`} icon={<i className='tabler-users-group' />}>
+                {nav.users}
               </MenuItem>
             </MenuSection>
           </>

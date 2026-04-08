@@ -29,13 +29,13 @@ import '@/app/globals.css'
 import '@assets/iconify-icons/generated-icons.css'
 
 export const metadata = {
-  title: 'X-Station - Gaming Center Management Dashboard',
+  title: 'Royal Dounts - Premium Donut Shop Management Dashboard',
   description:
-    'X-Station - Modern gaming center management system for tracking bookings, orders, inventory, and customer management.',
+    'Royal Dounts - Modern donut shop management system for tracking orders, inventory, and customer management.',
   icons: {
-    icon: '/xstation.jpeg',
-    shortcut: '/xstation.jpeg',
-    apple: '/xstation.jpeg'
+    icon: '/royal-donuts-logo.jpg',
+    shortcut: '/royal-donuts-logo.jpg',
+    apple: '/royal-donuts-logo.jpg'
   }
 }
 

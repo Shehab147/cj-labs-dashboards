@@ -20,56 +20,56 @@ const data: SearchData[] = [
   },
   {
     id: '2',
-    nameKey: 'frontDesk',
-    url: '/front-desk',
-    icon: 'tabler-device-desktop',
+    nameKey: 'pos',
+    url: '/pos',
+    icon: 'tabler-cash-register',
     sectionKey: 'main'
   },
-  // Room Management
+  // Shop Management
   {
     id: '3',
-    nameKey: 'roomsList',
-    url: '/rooms/list',
-    icon: 'tabler-list',
-    sectionKey: 'roomManagement'
+    nameKey: 'products',
+    url: '/products',
+    icon: 'tabler-cookie',
+    sectionKey: 'shopManagement'
   },
   {
     id: '4',
-    nameKey: 'roomsStatus',
-    url: '/rooms/status',
-    icon: 'tabler-chart-dots',
-    sectionKey: 'roomManagement'
+    nameKey: 'categories',
+    url: '/categories',
+    icon: 'tabler-category',
+    sectionKey: 'shopManagement'
   },
   {
     id: '5',
-    nameKey: 'bookings',
-    url: '/bookings',
-    icon: 'tabler-calendar-event',
-    sectionKey: 'roomManagement'
+    nameKey: 'tables',
+    url: '/tables',
+    icon: 'tabler-armchair',
+    sectionKey: 'shopManagement'
   },
-  // Customer & Orders
+  // Order Management
   {
     id: '6',
-    nameKey: 'customers',
-    url: '/customers',
-    icon: 'tabler-users',
-    sectionKey: 'customerOrders'
-  },
-  {
-    id: '7',
-    nameKey: 'cafeteria',
-    url: '/cafeteria',
-    icon: 'tabler-coffee',
-    sectionKey: 'customerOrders'
-  },
-  {
-    id: '8',
     nameKey: 'orders',
     url: '/orders',
     icon: 'tabler-receipt',
-    sectionKey: 'customerOrders'
+    sectionKey: 'orderManagement'
   },
-  // Management (Superadmin)
+  {
+    id: '7',
+    nameKey: 'kitchenOrders',
+    url: '/kitchen',
+    icon: 'tabler-chef-hat',
+    sectionKey: 'orderManagement'
+  },
+  {
+    id: '8',
+    nameKey: 'kitchenLogs',
+    url: '/kitchen/logs',
+    icon: 'tabler-file-text',
+    sectionKey: 'orderManagement'
+  },
+  // Analytics
   {
     id: '9',
     nameKey: 'analytics',
@@ -79,9 +79,52 @@ const data: SearchData[] = [
   },
   {
     id: '10',
-    nameKey: 'admins',
-    url: '/admins',
-    icon: 'tabler-user-cog',
+    nameKey: 'salesAnalytics',
+    url: '/analytics/sales',
+    icon: 'tabler-chart-line',
+    sectionKey: 'management'
+  },
+  {
+    id: '11',
+    nameKey: 'topProducts',
+    url: '/analytics/top-products',
+    icon: 'tabler-star',
+    sectionKey: 'management'
+  },
+  {
+    id: '12',
+    nameKey: 'cashierPerformance',
+    url: '/analytics/cashier-performance',
+    icon: 'tabler-user-check',
+    sectionKey: 'management'
+  },
+  // Management
+  {
+    id: '13',
+    nameKey: 'shifts',
+    url: '/shifts',
+    icon: 'tabler-clock',
+    sectionKey: 'management'
+  },
+  {
+    id: '14',
+    nameKey: 'users',
+    url: '/users',
+    icon: 'tabler-users',
+    sectionKey: 'management'
+  },
+  {
+    id: '15',
+    nameKey: 'inventory',
+    url: '/inventory',
+    icon: 'tabler-packages',
+    sectionKey: 'management'
+  },
+  {
+    id: '16',
+    nameKey: 'refunds',
+    url: '/refunds',
+    icon: 'tabler-receipt-refund',
     sectionKey: 'management'
   }
 ]

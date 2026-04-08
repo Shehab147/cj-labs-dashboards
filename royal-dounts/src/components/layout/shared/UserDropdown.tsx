@@ -20,6 +20,11 @@ import Typography from '@mui/material/Typography'
 import Divider from '@mui/material/Divider'
 import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
+import TextField from '@mui/material/TextField'
 
 // Third-party Imports
 import { signOut, useSession } from 'next-auth/react'
@@ -39,6 +44,9 @@ import { getStoredAdmin, shiftApi } from '@/services/api'
 // Context Imports
 import { useAuth } from '@/contexts/authContext'
 
+// Dictionary
+import { useDictionary } from '@/contexts/dictionaryContext'
+
 // Notification hook
 import { useNotification } from '@/hooks/useNotification'
 
@@ -53,11 +61,15 @@ const BadgeContentSpan = styled('span')({
 })
 
 const UserDropdown = () => {
+  const t = useDictionary()
   // States
   const [open, setOpen] = useState(false)
   const [admin, setAdmin] = useState<any>(null)
   const [shiftLoading, setShiftLoading] = useState(false)
   const [hasActiveShift, setHasActiveShift] = useState(true) // Default to true to show End Shift initially
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false)
+  const [shiftDialogType, setShiftDialogType] = useState<'start' | 'end'>('start')
+  const [cashInput, setCashInput] = useState('')
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -114,33 +126,41 @@ const UserDropdown = () => {
   // Get logout from auth context
   const { logout } = useAuth()
 
-  const handleShiftToggle = async () => {
+  const openShiftDialog = (type: 'start' | 'end') => {
+    setShiftDialogType(type)
+    setCashInput('')
+    setShiftDialogOpen(true)
+    setOpen(false)
+  }
+
+  const handleShiftConfirm = async () => {
+    const cashValue = parseFloat(cashInput)
+    if (isNaN(cashValue) || cashValue < 0) return
+
     try {
       setShiftLoading(true)
-      if (hasActiveShift) {
-        // End shift
-        const response = await shiftApi.end({})
+      if (shiftDialogType === 'end') {
+        const response = await shiftApi.end({ closing_cash: cashValue })
         if (response.status === 'success') {
-          showSuccess('Shift ended successfully - تم إنهاء الوردية بنجاح')
+          showSuccess(t.userDropdown.shiftEndedSuccess)
           setHasActiveShift(false)
-          setOpen(false)
+          setShiftDialogOpen(false)
         } else {
-          showError(response.message || 'Failed to end shift - فشل إنهاء الوردية')
+          showError(response.message || t.userDropdown.failedToEndShift)
         }
       } else {
-        // Start shift
-        const response = await shiftApi.start({})
+        const response = await shiftApi.start({ opening_cash: cashValue })
         if (response.status === 'success') {
-          showSuccess('Shift started successfully - تم بدء الوردية بنجاح')
+          showSuccess(t.userDropdown.shiftStartedSuccess)
           setHasActiveShift(true)
-          setOpen(false)
+          setShiftDialogOpen(false)
         } else {
-          showError(response.message || 'Failed to start shift - فشل بدء الوردية')
+          showError(response.message || t.userDropdown.failedToStartShift)
         }
       }
     } catch (error) {
       console.error('Shift toggle error:', error)
-      showError(hasActiveShift ? 'Failed to end shift - فشل إنهاء الوردية' : 'Failed to start shift - فشل بدء الوردية')
+      showError(shiftDialogType === 'end' ? t.userDropdown.failedToEndShift : t.userDropdown.failedToStartShift)
     } finally {
       setShiftLoading(false)
     }
@@ -202,9 +222,9 @@ const UserDropdown = () => {
                   <Divider className='mlb-1' />
                   <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, '/pages/user-profile')}>
                     <i className='tabler-user' />
-                    <Typography color='text.primary'>My Profile</Typography>
+                    <Typography color='text.primary'>{t.userDropdown.myProfile}</Typography>
                   </MenuItem>
-                  {admin?.role !== 'superadmin' && (
+                  {admin?.role !== 'admin' && (
                     <div className='flex items-center plb-2 pli-3'>
                       <Button
                         fullWidth
@@ -213,12 +233,12 @@ const UserDropdown = () => {
                         size='small'
                         disabled={shiftLoading}
                         endIcon={<i className={hasActiveShift ? 'tabler-clock-stop' : 'tabler-clock-play'} />}
-                        onClick={handleShiftToggle}
+                        onClick={() => openShiftDialog(hasActiveShift ? 'end' : 'start')}
                         sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
                       >
                         {shiftLoading 
-                          ? (hasActiveShift ? 'Ending...' : 'Starting...') 
-                          : (hasActiveShift ? 'End Shift - إنهاء الوردية' : 'Start Shift - بدء الوردية')}
+                          ? (hasActiveShift ? t.userDropdown.ending : t.userDropdown.starting) 
+                          : (hasActiveShift ? t.userDropdown.endShift : t.userDropdown.startShift)}
                       </Button>
                     </div>
                   )}
@@ -232,7 +252,7 @@ const UserDropdown = () => {
                       onClick={handleUserLogout}
                       sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
                     >
-                      Logout - تسجيل خروج
+                      {t.userDropdown.logout}
                     </Button>
                   </div>
                 </MenuList>
@@ -241,6 +261,37 @@ const UserDropdown = () => {
           </Fade>
         )}
       </Popper>
+
+      {/* Shift Cash Dialog */}
+      <Dialog open={shiftDialogOpen} onClose={() => !shiftLoading && setShiftDialogOpen(false)} maxWidth='xs' fullWidth>
+        <DialogTitle>
+          {shiftDialogType === 'start' ? t.userDropdown.dialogStartShift : t.userDropdown.dialogEndShift}
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            label={shiftDialogType === 'start' ? t.userDropdown.labelOpeningCash : t.userDropdown.labelClosingCash}
+            type='number'
+            value={cashInput}
+            onChange={e => setCashInput(e.target.value)}
+            fullWidth
+            autoFocus
+            className='mt-2'
+            inputProps={{ step: '0.01', min: '0' }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShiftDialogOpen(false)} disabled={shiftLoading}>{t.common.cancel}</Button>
+          <Button
+            variant='contained'
+            onClick={handleShiftConfirm}
+            disabled={shiftLoading || !cashInput || parseFloat(cashInput) < 0}
+          >
+            {shiftLoading
+              ? (shiftDialogType === 'end' ? t.userDropdown.ending : t.userDropdown.starting)
+              : (shiftDialogType === 'start' ? t.userDropdown.startShift : t.userDropdown.endShift)}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   )
 }

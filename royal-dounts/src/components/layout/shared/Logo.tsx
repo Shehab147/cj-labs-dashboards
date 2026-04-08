@@ -73,8 +73,8 @@ const Logo = ({ color }: { color?: CSSProperties['color'] }) => {
     <div className='flex items-center'>
       <div className='shrink-0'>
         <img 
-          src='/xstation.jpeg'
-          alt='X-Station Logo' 
+          src='/royal-donuts-logo.jpg'
+          alt='Royal Dounts Logo' 
           width={40} 
           height={40} 
           className='rounded'

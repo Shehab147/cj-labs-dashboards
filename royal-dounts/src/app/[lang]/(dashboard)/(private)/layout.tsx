@@ -15,8 +15,6 @@ import Navbar from '@components/layout/vertical/Navbar'
 import VerticalFooter from '@components/layout/vertical/Footer'
 import HorizontalFooter from '@components/layout/horizontal/Footer'
 import AuthGuard from '@/hocs/AuthGuard'
-import BookingAlerts from '@/components/BookingAlerts'
-import LowStockAlerts from '@/components/LowStockAlerts'
 
 // Config Imports
 import { i18n } from '@configs/i18n'
@@ -59,8 +57,6 @@ const Layout = async (props: ChildrenType & { params: Promise<{ lang: string }> 
             </HorizontalLayout>
           }
         />
-        <BookingAlerts />
-        <LowStockAlerts />
       </AuthGuard>
     </Providers>
   )

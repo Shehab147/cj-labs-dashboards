@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
         locale: false
       },
       {
-        source: '/:path((?!en|ar|front-pages|images|api|favicon.ico|xstation.jpeg).*)*',
+        source: '/:path((?!en|ar|front-pages|images|api|favicon.ico|royal-donuts-logo.jpg).*)*',
         destination: '/en/:path*',
         permanent: true,
         locale: false

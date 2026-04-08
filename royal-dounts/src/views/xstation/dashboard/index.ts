@@ -1,6 +1,0 @@
-export { default } from './Dashboard'
-export { default as DashboardStatsCard } from './DashboardStatsCard'
-export { default as RoomsOverview } from './RoomsOverview'
-export { default as ActiveBookingsCard } from './ActiveBookingsCard'
-export { default as LowStockAlert } from './LowStockAlert'
-export { default as RecentOrdersTable } from './RecentOrdersTable'

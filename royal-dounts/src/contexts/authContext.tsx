@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { authApi, setToken, removeToken, getStoredAdmin, setStoredAdmin, getToken } from '@/services/api'
-import type { Admin, AdminRole } from '@/types/xstation'
+import type { Admin, AdminRole } from '@/types/royal'
 import { getLocalizedUrl } from '@/utils/i18n'
 import type { Locale } from '@/configs/i18n'
 
@@ -11,7 +11,9 @@ interface AuthContextType {
   admin: Admin | null
   isLoading: boolean
   isAuthenticated: boolean
-  isSuperadmin: boolean
+  isAdmin: boolean
+  isCashier: boolean
+  isKitchen: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>
   logout: () => Promise<void>
   validateSession: () => Promise<boolean>
@@ -28,7 +30,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const locale = (lang as Locale) || 'en'
 
   const isAuthenticated = !!admin
-  const isSuperadmin = admin?.role === 'superadmin'
+  const isAdmin = admin?.role === 'admin'
+  const isCashier = admin?.role === 'cashier'
+  const isKitchen = admin?.role === 'kitchen'
 
   const validateSession = useCallback(async (): Promise<boolean> => {
     try {
@@ -140,7 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         admin,
         isLoading,
         isAuthenticated,
-        isSuperadmin,
+        isAdmin,
+        isCashier,
+        isKitchen,
         login,
         logout,
         validateSession,
@@ -163,10 +169,10 @@ export function useAuth() {
 // HOC for protecting routes
 export function withAuth<P extends object>(
   WrappedComponent: React.ComponentType<P>,
-  options?: { requireSuperadmin?: boolean }
+  options?: { requireAdmin?: boolean }
 ) {
   return function AuthenticatedComponent(props: P) {
-    const { isAuthenticated, isSuperadmin, isLoading } = useAuth()
+    const { isAuthenticated, isAdmin, isLoading } = useAuth()
     const router = useRouter()
     const { lang } = useParams()
     const locale = (lang as Locale) || 'en'
@@ -175,11 +181,11 @@ export function withAuth<P extends object>(
       if (!isLoading) {
         if (!isAuthenticated) {
           router.push(getLocalizedUrl('/login', locale))
-        } else if (options?.requireSuperadmin && !isSuperadmin) {
+        } else if (options?.requireAdmin && !isAdmin) {
           router.push(getLocalizedUrl('/dashboard', locale))
         }
       }
-    }, [isAuthenticated, isSuperadmin, isLoading, router, locale])
+    }, [isAuthenticated, isAdmin, isLoading, router, locale])
 
     if (isLoading) {
       return (
@@ -193,7 +199,7 @@ export function withAuth<P extends object>(
       return null
     }
 
-    if (options?.requireSuperadmin && !isSuperadmin) {
+    if (options?.requireAdmin && !isAdmin) {
       return null
     }
 

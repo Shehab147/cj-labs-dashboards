@@ -4,178 +4,135 @@ import type { getDictionary } from '@/utils/getDictionary'
 
 const verticalMenuData = (
   dictionary: Awaited<ReturnType<typeof getDictionary>>,
-  isSuperadmin: boolean = false
+  params: { isAdmin?: boolean; isCashier?: boolean; isKitchen?: boolean }
 ): VerticalMenuDataType[] => {
-  const menuItems: VerticalMenuDataType[] = [
-    // Dashboard
-    {
-      label: dictionary['navigation'].dashboard,
+  const { isAdmin = false, isCashier = false, isKitchen = false } = params
+  const nav = dictionary['navigation']
+  const menuItems: VerticalMenuDataType[] = []
+
+  // Dashboard - admin only
+  if (isAdmin) {
+    menuItems.push({
+      label: nav.dashboard,
       icon: 'tabler-smart-home',
       href: '/dashboard'
-    },
-    // Front Desk
-    {
-      label: dictionary['navigation'].frontDesk,
-      icon: 'tabler-device-desktop',
-      href: '/front-desk'
-    },
-    // Rooms Section
-    {
-      label: dictionary['navigation'].rooms,
-      icon: 'tabler-door',
-      children: [
-        {
-          label: dictionary['navigation'].roomsList,
-          icon: 'tabler-list',
-          href: '/rooms/list'
-        },
-        {
-          label: dictionary['navigation'].roomsStatus,
-          icon: 'tabler-activity',
-          href: '/rooms/status'
-        }
-      ]
-    },
-    // Bookings Section
-    {
-      label: dictionary['navigation'].bookings,
-      icon: 'tabler-calendar-event',
-      children: [
-        {
-          label: dictionary['navigation'].activeBookings,
-          icon: 'tabler-player-play',
-          href: '/bookings/active'
-        },
-        {
-          label: dictionary['navigation'].allBookings,
-          icon: 'tabler-list',
-          href: '/bookings/list'
-        },
-        {
-          label: dictionary['navigation'].todaysBookings,
-          icon: 'tabler-calendar-time',
-          href: '/bookings/today'
-        }
-      ]
-    },
-    // Customers Section
-    {
-      label: dictionary['navigation'].customers,
-      icon: 'tabler-users',
-      href: '/customers'
-    },
-    // Cafeteria Section
-    {
-      label: dictionary['navigation'].cafeteria,
-      icon: 'tabler-coffee',
-      children: [
-        {
-          label: dictionary['navigation'].items,
-          icon: 'tabler-package',
-          href: '/cafeteria/items'
-        },
-        {
-          label: dictionary['navigation'].lowStock,
-          icon: 'tabler-alert-triangle',
-          href: '/cafeteria/low-stock'
-        }
-      ]
-    },
-    // Orders Section
-    {
-      label: dictionary['navigation'].orders,
-      icon: 'tabler-shopping-cart',
-      children: [
-        {
-          label: dictionary['navigation'].newOrder,
-          icon: 'tabler-plus',
-          href: '/orders/new'
-        },
-        {
-          label: dictionary['navigation'].allOrders,
-          icon: 'tabler-list',
-          href: '/orders/list'
-        },
-        {
-          label: dictionary['navigation'].todaysOrders,
-          icon: 'tabler-calendar-time',
-          href: '/orders/today'
-        }
-      ]
-    }
-  ]
+    })
+  }
 
-  // Superadmin-only sections
-  if (isSuperadmin) {
+  // POS - admin & cashier
+  if (isAdmin || isCashier) {
+    menuItems.push({
+      label: nav.pos,
+      icon: 'tabler-cash-register',
+      href: '/pos'
+    })
+  }
+
+  // Shop Management - admin
+  if (isAdmin) {
     menuItems.push(
-      // Analytics Section
       {
-        label: dictionary['navigation'].analytics,
-        isSection: true,
-        children: [
-          {
-            label: dictionary['navigation'].overview,
-            icon: 'tabler-chart-pie',
-            href: '/analytics/overview'
-          },
-          {
-            label: dictionary['navigation'].dailyIncome,
-            icon: 'tabler-report-money',
-            href: '/analytics/daily-income'
-          },
-          {
-            label: dictionary['navigation'].revenue,
-            icon: 'tabler-currency-dollar',
-            href: '/analytics/revenue'
-          },
-          {
-            label: dictionary['navigation'].roomAnalytics,
-            icon: 'tabler-door',
-            href: '/analytics/rooms'
-          },
-          {
-            label: dictionary['navigation'].cafeteriaAnalytics,
-            icon: 'tabler-coffee',
-            href: '/analytics/cafeteria'
-          },
-          {
-            label: dictionary['navigation'].customerAnalytics,
-            icon: 'tabler-users',
-            href: '/analytics/customers'
-          },
-          {
-            label: dictionary['navigation'].staffAnalytics,
-            icon: 'tabler-user-check',
-            href: '/analytics/staff'
-          }
-        ]
+        label: nav.products,
+        icon: 'tabler-cookie',
+        href: '/products'
       },
-      // Administration Section
       {
-        label: dictionary['navigation'].administration,
-        isSection: true,
-        children: [
-          {
-            label: dictionary['navigation'].adminsList,
-            icon: 'tabler-user-shield',
-            href: '/admins/list'
-          },
-          {
-            label: dictionary['navigation'].attendance,
-            icon: 'tabler-clock-check',
-            href: '/admins/attendance'
-          }
-        ]
+        label: nav.categories,
+        icon: 'tabler-category',
+        href: '/categories'
+      },
+      {
+        label: nav.tables,
+        icon: 'tabler-armchair',
+        href: '/tables'
       }
     )
   }
 
-  // Settings (for all users)
-  menuItems.push({
-    label: dictionary['navigation'].settings,
-    icon: 'tabler-settings',
-    href: '/settings'
-  })
+  // Orders - admin & cashier
+  if (isAdmin || isCashier) {
+    menuItems.push({
+      label: nav.orders,
+      icon: 'tabler-receipt',
+      href: '/orders'
+    })
+  }
+
+  // Kitchen - admin & kitchen
+  if (isAdmin || isKitchen) {
+    menuItems.push({
+      label: nav.kitchen,
+      icon: 'tabler-chef-hat',
+      children: [
+        {
+          label: nav.kitchenOrders,
+          icon: 'tabler-list-check',
+          href: '/kitchen'
+        },
+        {
+          label: nav.kitchenLogs,
+          icon: 'tabler-file-text',
+          href: '/kitchen/logs'
+        }
+      ]
+    })
+  }
+
+  // Analytics - admin only
+  if (isAdmin) {
+    menuItems.push({
+      label: nav.analytics,
+      icon: 'tabler-chart-bar',
+      children: [
+        {
+          label: nav.overview,
+          icon: 'tabler-chart-pie',
+          href: '/analytics'
+        },
+        {
+          label: nav.salesAnalytics,
+          icon: 'tabler-chart-line',
+          href: '/analytics/sales'
+        },
+        {
+          label: nav.topProducts,
+          icon: 'tabler-star',
+          href: '/analytics/top-products'
+        },
+        {
+          label: nav.cashierPerformance,
+          icon: 'tabler-user-check',
+          href: '/analytics/cashier-performance'
+        }
+      ]
+    })
+  }
+
+  // Management - admin only
+  if (isAdmin) {
+    menuItems.push(
+      {
+        label: nav.shifts,
+        icon: 'tabler-clock',
+        href: '/shifts'
+      },
+      {
+        label: nav.users,
+        icon: 'tabler-users',
+        href: '/users'
+      },
+      {
+        label: nav.inventory,
+        icon: 'tabler-packages',
+        href: '/inventory'
+      },
+      {
+        label: nav.refunds,
+        icon: 'tabler-receipt-refund',
+        href: '/refunds'
+      }
+    )
+  }
 
   return menuItems
 }

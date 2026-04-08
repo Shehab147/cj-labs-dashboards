@@ -54,9 +54,9 @@ export type Config = {
 }
 
 const themeConfig: Config = {
-  templateName: 'X-Station',
+  templateName: 'Royal Dounts',
   homePageUrl: '/dashboard',
-  settingsCookieName: 'x-station-settings',
+  settingsCookieName: 'royal-dounts-settings',
   mode: 'light', // 'system', 'light', 'dark'
   skin: 'bordered', // 'default', 'bordered' - Design Language: Border > shadow
   semiDark: false, // true, false

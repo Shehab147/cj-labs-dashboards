@@ -55,7 +55,7 @@ const HorizontalMenu = ({ dictionary }: { dictionary: Awaited<ReturnType<typeof 
   const verticalNavOptions = useVerticalNav()
   const theme = useTheme()
   const params = useParams()
-  const { isSuperadmin } = useAuth()
+  const { isAdmin, isCashier, isKitchen } = useAuth()
 
   // Vars
   const { transitionDuration } = verticalNavOptions
@@ -89,58 +89,82 @@ const HorizontalMenu = ({ dictionary }: { dictionary: Awaited<ReturnType<typeof 
           menuSectionStyles: verticalMenuSectionStyles(verticalNavOptions, theme)
         }}
       >
-        {/* Dashboard */}
-        <MenuItem href={`/${locale}/dashboard`} icon={<i className='tabler-smart-home' />}>
-          {nav.dashboard}
-        </MenuItem>
-
-        {/* Front Desk */}
-        <MenuItem href={`/${locale}/front-desk`} icon={<i className='tabler-device-desktop' />}>
-          {nav.frontDesk}
-        </MenuItem>
-
-        {/* Rooms */}
-        <SubMenu label={nav.rooms} icon={<i className='tabler-door' />}>
-          <MenuItem href={`/${locale}/rooms/list`} icon={<i className='tabler-list' />}>
-            {nav.roomsList}
-          </MenuItem>
-          <MenuItem href={`/${locale}/rooms/status`} icon={<i className='tabler-chart-dots' />}>
-            {nav.roomsStatus}
-          </MenuItem>
-        </SubMenu>
-
-        {/* Bookings */}
-        <MenuItem href={`/${locale}/bookings`} icon={<i className='tabler-calendar-event' />}>
-          {nav.bookings}
-        </MenuItem>
-
-        {/* Customers */}
-        <MenuItem href={`/${locale}/customers`} icon={<i className='tabler-users' />}>
-          {nav.customers}
-        </MenuItem>
-
-        {/* Cafeteria */}
-        <MenuItem href={`/${locale}/cafeteria`} icon={<i className='tabler-coffee' />}>
-          {nav.cafeteria}
-        </MenuItem>
-
-        {/* Orders */}
-        <MenuItem href={`/${locale}/orders`} icon={<i className='tabler-receipt' />}>
-          {nav.orders}
-        </MenuItem>
-
-        {/* Analytics - Superadmin only */}
-        {isSuperadmin && (
-          <MenuItem href={`/${locale}/analytics`} icon={<i className='tabler-chart-bar' />}>
-            {nav.analytics}
+        {/* Dashboard - admin only */}
+        {isAdmin && (
+          <MenuItem href={`/${locale}/dashboard`} icon={<i className='tabler-smart-home' />}>
+            {nav.dashboard}
           </MenuItem>
         )}
 
-        {/* Admins - Superadmin only */}
-        {isSuperadmin && (
-          <MenuItem href={`/${locale}/admins`} icon={<i className='tabler-user-cog' />}>
-            {nav.admins}
+        {/* POS - admin & cashier */}
+        {(isAdmin || isCashier) && (
+          <MenuItem href={`/${locale}/pos`} icon={<i className='tabler-cash-register' />}>
+            {nav.pos}
           </MenuItem>
+        )}
+
+        {/* Products & Categories - admin only */}
+        {isAdmin && (
+          <>
+            <MenuItem href={`/${locale}/products`} icon={<i className='tabler-cookie' />}>
+              {nav.products}
+            </MenuItem>
+            <MenuItem href={`/${locale}/categories`} icon={<i className='tabler-category' />}>
+              {nav.categories}
+            </MenuItem>
+            <MenuItem href={`/${locale}/tables`} icon={<i className='tabler-armchair' />}>
+              {nav.tables}
+            </MenuItem>
+          </>
+        )}
+
+        {/* Orders - admin & cashier */}
+        {(isAdmin || isCashier) && (
+          <MenuItem href={`/${locale}/orders`} icon={<i className='tabler-receipt' />}>
+            {nav.orders}
+          </MenuItem>
+        )}
+
+        {/* Kitchen - admin & kitchen */}
+        {(isAdmin || isKitchen) && (
+          <SubMenu label={nav.kitchen} icon={<i className='tabler-chef-hat' />}>
+            <MenuItem href={`/${locale}/kitchen`} icon={<i className='tabler-list-check' />}>
+              {nav.kitchenOrders}
+            </MenuItem>
+            <MenuItem href={`/${locale}/kitchen/logs`} icon={<i className='tabler-file-text' />}>
+              {nav.kitchenLogs}
+            </MenuItem>
+          </SubMenu>
+        )}
+
+        {/* Analytics - admin only */}
+        {isAdmin && (
+          <SubMenu label={nav.analytics} icon={<i className='tabler-chart-bar' />}>
+            <MenuItem href={`/${locale}/analytics`} icon={<i className='tabler-chart-pie' />}>
+              {nav.overview}
+            </MenuItem>
+            <MenuItem href={`/${locale}/analytics/sales`} icon={<i className='tabler-chart-line' />}>
+              {nav.salesAnalytics}
+            </MenuItem>
+            <MenuItem href={`/${locale}/analytics/top-products`} icon={<i className='tabler-star' />}>
+              {nav.topProducts}
+            </MenuItem>
+            <MenuItem href={`/${locale}/analytics/cashier-performance`} icon={<i className='tabler-user-check' />}>
+              {nav.cashierPerformance}
+            </MenuItem>
+          </SubMenu>
+        )}
+
+        {/* Management - admin only */}
+        {isAdmin && (
+          <>
+            <MenuItem href={`/${locale}/shifts`} icon={<i className='tabler-clock' />}>
+              {nav.shifts}
+            </MenuItem>
+            <MenuItem href={`/${locale}/users`} icon={<i className='tabler-users' />}>
+              {nav.users}
+            </MenuItem>
+          </>
         )}
       </Menu>
     </HorizontalNav>

@@ -4,124 +4,67 @@ import type { getDictionary } from '@/utils/getDictionary'
 
 const horizontalMenuData = (
   dictionary: Awaited<ReturnType<typeof getDictionary>>,
-  isSuperadmin: boolean = false
+  params: { isAdmin?: boolean; isCashier?: boolean; isKitchen?: boolean }
 ): HorizontalMenuDataType[] => {
-  const menuItems: HorizontalMenuDataType[] = [
-    {
-      label: dictionary['navigation'].dashboard,
+  const { isAdmin = false, isCashier = false, isKitchen = false } = params
+  const nav = dictionary['navigation']
+  const menuItems: HorizontalMenuDataType[] = []
+
+  if (isAdmin) {
+    menuItems.push({
+      label: nav.dashboard,
       icon: 'tabler-smart-home',
       href: '/dashboard'
-    },
-    {
-      label: dictionary['navigation'].frontDesk,
-      icon: 'tabler-device-desktop',
-      href: '/front-desk'
-    },
-    {
-      label: dictionary['navigation'].rooms,
-      icon: 'tabler-door',
-      children: [
-        {
-          label: dictionary['navigation'].roomsList,
-          href: '/rooms/list'
-        },
-        {
-          label: dictionary['navigation'].roomsStatus,
-          href: '/rooms/status'
-        }
-      ]
-    },
-    {
-      label: dictionary['navigation'].bookings,
-      icon: 'tabler-calendar-event',
-      children: [
-        {
-          label: dictionary['navigation'].activeBookings,
-          href: '/bookings/active'
-        },
-        {
-          label: dictionary['navigation'].allBookings,
-          href: '/bookings/list'
-        }
-      ]
-    },
-    {
-      label: dictionary['navigation'].customers,
-      icon: 'tabler-users',
-      href: '/customers'
-    },
-    {
-      label: dictionary['navigation'].cafeteria,
-      icon: 'tabler-coffee',
-      children: [
-        {
-          label: dictionary['navigation'].items,
-          href: '/cafeteria/items'
-        },
-        {
-          label: dictionary['navigation'].lowStock,
-          href: '/cafeteria/low-stock'
-        }
-      ]
-    },
-    {
-      label: dictionary['navigation'].orders,
-      icon: 'tabler-shopping-cart',
-      children: [
-        {
-          label: dictionary['navigation'].newOrder,
-          href: '/orders/new'
-        },
-        {
-          label: dictionary['navigation'].allOrders,
-          href: '/orders/list'
-        }
-      ]
-    }
-  ]
+    })
+  }
 
-  if (isSuperadmin) {
+  if (isAdmin || isCashier) {
+    menuItems.push({
+      label: nav.pos,
+      icon: 'tabler-cash-register',
+      href: '/pos'
+    })
+  }
+
+  if (isAdmin) {
+    menuItems.push(
+      { label: nav.products, icon: 'tabler-cookie', href: '/products' },
+      { label: nav.categories, icon: 'tabler-category', href: '/categories' },
+      { label: nav.tables, icon: 'tabler-armchair', href: '/tables' }
+    )
+  }
+
+  if (isAdmin || isCashier) {
+    menuItems.push({ label: nav.orders, icon: 'tabler-receipt', href: '/orders' })
+  }
+
+  if (isAdmin || isKitchen) {
+    menuItems.push({
+      label: nav.kitchen,
+      icon: 'tabler-chef-hat',
+      children: [
+        { label: nav.kitchenOrders, href: '/kitchen' },
+        { label: nav.kitchenLogs, href: '/kitchen/logs' }
+      ]
+    })
+  }
+
+  if (isAdmin) {
     menuItems.push(
       {
-        label: dictionary['navigation'].analytics,
-        icon: 'tabler-chart-pie',
+        label: nav.analytics,
+        icon: 'tabler-chart-bar',
         children: [
-          {
-            label: dictionary['navigation'].overview,
-            href: '/analytics/overview'
-          },
-          {
-            label: dictionary['navigation'].revenue,
-            href: '/analytics/revenue'
-          },
-          {
-            label: dictionary['navigation'].roomAnalytics,
-            href: '/analytics/rooms'
-          },
-          {
-            label: dictionary['navigation'].cafeteriaAnalytics,
-            href: '/analytics/cafeteria'
-          },
-          {
-            label: dictionary['navigation'].staffAnalytics,
-            href: '/analytics/staff'
-          }
+          { label: nav.overview, href: '/analytics' },
+          { label: nav.salesAnalytics, href: '/analytics/sales' },
+          { label: nav.topProducts, href: '/analytics/top-products' },
+          { label: nav.cashierPerformance, href: '/analytics/cashier-performance' }
         ]
       },
-      {
-        label: dictionary['navigation'].admins,
-        icon: 'tabler-user-shield',
-        children: [
-          {
-            label: dictionary['navigation'].adminsList,
-            href: '/admins/list'
-          },
-          {
-            label: dictionary['navigation'].attendance,
-            href: '/admins/attendance'
-          }
-        ]
-      }
+      { label: nav.shifts, icon: 'tabler-clock', href: '/shifts' },
+      { label: nav.users, icon: 'tabler-users', href: '/users' },
+      { label: nav.inventory, icon: 'tabler-packages', href: '/inventory' },
+      { label: nav.refunds, icon: 'tabler-receipt-refund', href: '/refunds' }
     )
   }
 

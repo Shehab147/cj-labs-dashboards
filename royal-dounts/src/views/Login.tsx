@@ -164,7 +164,7 @@ const Login = ({ mode, dictionary }: Props) => {
           }
         )}
       >
-        <LoginIllustration src='/xstation.jpeg' alt='character-illustration' />
+        <LoginIllustration src='/royal-donuts-logo.jpg' alt='character-illustration' />
         {!hidden && <MaskImg alt='mask' src={authBackground} />}
       </div>
       <div className='flex justify-center items-center bs-full bg-backgroundPaper !min-is-full p-6 md:!min-is-[unset] md:p-12 md:is-[480px]'>
@@ -265,7 +265,7 @@ const Login = ({ mode, dictionary }: Props) => {
           </form>
 
           <Typography variant='body2' color='text.secondary' className='text-center mt-4'>
-            {dictionary.dashboard.welcomeMessage}
+            {dictionary.auth.signInMessage}
           </Typography>
         </div>
       </div>

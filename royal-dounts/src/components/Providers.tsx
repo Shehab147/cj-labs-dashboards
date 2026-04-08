@@ -6,6 +6,7 @@ import { NextAuthProvider } from '@/contexts/nextAuthProvider'
 import { VerticalNavProvider } from '@menu/contexts/verticalNavContext'
 import { SettingsProvider } from '@core/contexts/settingsContext'
 import { AuthProvider } from '@/contexts/authContext'
+import { DictionaryProvider } from '@/contexts/dictionaryContext'
 import { NotificationQueueProvider } from '@/contexts/notificationQueueContext'
 import ThemeProvider from '@components/theme'
 import ReduxProvider from '@/redux-store/ReduxProvider'
@@ -36,7 +37,9 @@ const Providers = async (props: Props) => {
           <ThemeProvider direction={direction} systemMode={systemMode}>
             <ReduxProvider>
               <AuthProvider>
-                <NotificationQueueProvider>{children}</NotificationQueueProvider>
+                <DictionaryProvider>
+                  <NotificationQueueProvider>{children}</NotificationQueueProvider>
+                </DictionaryProvider>
               </AuthProvider>
             </ReduxProvider>
             <AppReactToastify direction={direction} hideProgressBar />

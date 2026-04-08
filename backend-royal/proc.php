@@ -5,7 +5,7 @@ try {
     $action = isset($_GET['action']) ? $_GET['action'] : null;
     $allowedActions = [
         // Auth
-        'login', 'logout',
+        'login', 'logout', 'validateSession', 'getProfile',
         // Shifts
         'startShift', 'endShift', 'getCurrentShift', 'getMyShiftHistory', 'addShiftExpense', 'getShiftExpenses', 'getShiftSummary', 'deleteShiftExpense', 'getAllShifts', 'getShiftReport',
         // Payments
@@ -25,7 +25,7 @@ try {
         // Orders
         'createOrder', 'getOrders', 'getOrderById', 'updateOrder', 'deleteOrder', 'addOrderItem', 'updateOrderItem', 'deleteOrderItem', 'updateOrderStatus',
         // Reports & Analytics
-        'getDailySalesReport', 'getSalesAnalytics', 'getTopProducts', 'getCategoryAnalytics', 'getCashierPerformance', 'getAdminDashboard', 'getActivityLog', 'getEndOfDayReport', 'exportReport',
+        'getDailySalesReport', 'getSalesAnalytics', 'getTopProducts', 'getCategoryAnalytics', 'getCashierPerformance', 'getAdminDashboard', 'getEndOfDayReport', 'exportReport',
         // Inventory
         'adjustInventory', 'getInventoryAdjustments'
     ];
@@ -64,7 +64,10 @@ function login()
     $stmt = $conn->prepare("INSERT INTO sessions (user_id, token, status, created_at, expire_at) VALUES (?, ?, ?, ?, ?)");
     $stmt->bind_param("issss", $user['id'], $token, $status, $created_at, $expire_at);
     $stmt->execute();
-    respond(200, ['token' => $token]);
+    
+    // Return token and user data (without password)
+    unset($user['password']);
+    respond(200, ['token' => $token, 'admin' => $user]);
 }
 function logout()
 {
@@ -101,6 +104,40 @@ function logout()
     $stmt->execute();
     respond(200, ['message' => 'Logged out successfully']);
 }
+
+function validateSession()
+{
+    global $conn;
+    $token = getToken();
+    if (!$token) {
+        respond(200, ['valid' => false]);
+    }
+    $userid = validateToken();
+    if (!$userid) {
+        respond(200, ['valid' => false]);
+    }
+    // Get user data
+    $stmt = $conn->prepare("SELECT id, name, email, role FROM users WHERE id = ?");
+    $stmt->bind_param("i", $userid);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    if ($result->num_rows === 0) {
+        respond(200, ['valid' => false]);
+    }
+    $admin = $result->fetch_assoc();
+    respond(200, ['valid' => true, 'admin' => $admin]);
+}
+
+function getProfile()
+{
+    global $conn;
+    $admin = getAdmin();
+    if (!$admin) {
+        respond(401, ['error' => 'Unauthorized']);
+    }
+    respond(200, $admin);
+}
+
 //cashier_shifts functions
 
 /**
@@ -1738,8 +1775,9 @@ function addProduct()
     $price = $input['price'];
     $cost = $input['cost'];
     $stock = $input['stock'];
-    $stmt = $conn->prepare("INSERT INTO products (name, category_id, price, cost, stock) VALUES (?, ?, ?, ?, ?)");
-    $stmt->bind_param("siddi", $name, $category_id, $price, $cost, $stock);
+    $description = isset($input['description']) ? $input['description'] : null;
+    $stmt = $conn->prepare("INSERT INTO products (name, category_id, price, cost, stock, description) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("siddis", $name, $category_id, $price, $cost, $stock, $description);
     if ($stmt->execute()) {
         respond(201, ['message' => 'Product added successfully']);
     } else {
@@ -1762,7 +1800,7 @@ function updateProduct()
     $id = $input['id'];
 
     // Fetch current product data
-    $stmt = $conn->prepare("SELECT name, category_id, price, cost, stock FROM products WHERE id = ?");
+    $stmt = $conn->prepare("SELECT name, category_id, price, cost, stock, description FROM products WHERE id = ?");
     $stmt->bind_param("i", $id);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -1777,9 +1815,10 @@ function updateProduct()
     $price       = isset($input['price'])       ? $input['price']       : $current['price'];
     $cost        = isset($input['cost'])        ? $input['cost']        : $current['cost'];
     $stock       = isset($input['stock'])       ? $input['stock']       : $current['stock'];
+    $description = isset($input['description']) ? $input['description'] : $current['description'];
 
-    $stmt = $conn->prepare("UPDATE products SET name = ?, category_id = ?, price = ?, cost = ?, stock = ? WHERE id = ?");
-    $stmt->bind_param("siddii", $name, $category_id, $price, $cost, $stock, $id);
+    $stmt = $conn->prepare("UPDATE products SET name = ?, category_id = ?, price = ?, cost = ?, stock = ?, description = ? WHERE id = ?");
+    $stmt->bind_param("siddisi", $name, $category_id, $price, $cost, $stock, $description, $id);
     if ($stmt->execute()) {
         // If stock increased, log the added quantity to kitchen_logs
         $addedStock = $stock - $current['stock'];
@@ -1831,9 +1870,9 @@ function getProducts()
     }
     // cashier sees price only; admin and kitchen see cost too
     if ($admin['role'] === 'cashier') {
-        $result = $conn->query("SELECT id, name, category_id, price, stock FROM products WHERE is_active = 1");
+        $result = $conn->query("SELECT id, name, category_id, price, stock, description FROM products WHERE is_active = 1");
     } elseif ($admin['role'] === 'admin' || $admin['role'] === 'kitchen') {
-        $result = $conn->query("SELECT id, name, category_id, price, cost, stock, is_active FROM products");
+        $result = $conn->query("SELECT id, name, category_id, price, cost, stock, is_active, description FROM products");
     } else {
         respond(403, ['error' => 'Unauthorized']);
     }
@@ -4019,36 +4058,71 @@ function getAdminDashboard()
     if (!$admin) {
         respond(403, ['error' => 'Unauthorized']);
     }
-    if ($admin['role'] !== 'admin') {
-        respond(403, ['error' => 'Only admins can view dashboard']);
-    }
     
     $today = date('Y-m-d');
     $yesterday = date('Y-m-d', strtotime('-1 day'));
+    $isAdmin = $admin['role'] === 'admin';
+    $userId = (int)$admin['id'];
     
-    // Today's stats
-    $stmt = $conn->prepare(
-        "SELECT COUNT(*) as orders, 
-                COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total ELSE 0 END), 0) as revenue,
-                COUNT(CASE WHEN status = 'pending' OR status = 'preparing' THEN 1 END) as active_orders
-         FROM orders WHERE DATE(created_at) = ?"
-    );
-    $stmt->bind_param("s", $today);
+    // Today's stats — cashier sees only their own orders
+    if ($isAdmin) {
+        $stmt = $conn->prepare(
+            "SELECT COUNT(*) as orders, 
+                    COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total ELSE 0 END), 0) as revenue,
+                    COUNT(CASE WHEN status = 'pending' OR status = 'preparing' THEN 1 END) as active_orders
+             FROM orders WHERE DATE(created_at) = ?"
+        );
+        $stmt->bind_param("s", $today);
+    } else {
+        $stmt = $conn->prepare(
+            "SELECT COUNT(*) as orders, 
+                    COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total ELSE 0 END), 0) as revenue,
+                    COUNT(CASE WHEN status = 'pending' OR status = 'preparing' THEN 1 END) as active_orders
+             FROM orders WHERE DATE(created_at) = ? AND user_id = ?"
+        );
+        $stmt->bind_param("si", $today, $userId);
+    }
     $stmt->execute();
     $todayStats = $stmt->get_result()->fetch_assoc();
     
     // Yesterday's stats for comparison
-    $stmt->bind_param("s", $yesterday);
-    $stmt->execute();
-    $yesterdayStats = $stmt->get_result()->fetch_assoc();
+    if ($isAdmin) {
+        $stmtY = $conn->prepare(
+            "SELECT COUNT(*) as orders, 
+                    COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total ELSE 0 END), 0) as revenue
+             FROM orders WHERE DATE(created_at) = ?"
+        );
+        $stmtY->bind_param("s", $yesterday);
+    } else {
+        $stmtY = $conn->prepare(
+            "SELECT COUNT(*) as orders, 
+                    COALESCE(SUM(CASE WHEN status != 'cancelled' THEN total ELSE 0 END), 0) as revenue
+             FROM orders WHERE DATE(created_at) = ? AND user_id = ?"
+        );
+        $stmtY->bind_param("si", $yesterday, $userId);
+    }
+    $stmtY->execute();
+    $yesterdayStats = $stmtY->get_result()->fetch_assoc();
     
     // Active shifts
-    $activeShifts = $conn->query(
-        "SELECT cs.id, u.name as cashier_name, cs.start_time, cs.opening_cash
-         FROM cashier_shifts cs
-         JOIN users u ON cs.user_id = u.id
-         WHERE cs.status = 'open'"
-    )->fetch_all(MYSQLI_ASSOC);
+    if ($isAdmin) {
+        $activeShifts = $conn->query(
+            "SELECT cs.id, u.name as cashier_name, cs.start_time, cs.opening_cash
+             FROM cashier_shifts cs
+             JOIN users u ON cs.user_id = u.id
+             WHERE cs.status = 'open'"
+        )->fetch_all(MYSQLI_ASSOC);
+    } else {
+        $stmtS = $conn->prepare(
+            "SELECT cs.id, u.name as cashier_name, cs.start_time, cs.opening_cash
+             FROM cashier_shifts cs
+             JOIN users u ON cs.user_id = u.id
+             WHERE cs.status = 'open' AND cs.user_id = ?"
+        );
+        $stmtS->bind_param("i", $userId);
+        $stmtS->execute();
+        $activeShifts = $stmtS->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
     
     // Low stock alert
     $lowStock = $conn->query(
@@ -4056,20 +4130,40 @@ function getAdminDashboard()
     )->fetch_assoc()['count'];
     
     // Today's production
-    $stmt = $conn->prepare(
-        "SELECT COALESCE(SUM(quantity), 0) as total FROM kitchen_logs WHERE DATE(created_at) = ?"
-    );
-    $stmt->bind_param("s", $today);
-    $stmt->execute();
-    $todayProduction = (int)$stmt->get_result()->fetch_assoc()['total'];
+    if ($isAdmin) {
+        $stmtP = $conn->prepare(
+            "SELECT COALESCE(SUM(quantity), 0) as total FROM kitchen_logs WHERE DATE(created_at) = ?"
+        );
+        $stmtP->bind_param("s", $today);
+    } else {
+        $stmtP = $conn->prepare(
+            "SELECT COALESCE(SUM(quantity), 0) as total FROM kitchen_logs WHERE DATE(created_at) = ? AND user_id = ?"
+        );
+        $stmtP->bind_param("si", $today, $userId);
+    }
+    $stmtP->execute();
+    $todayProduction = (int)$stmtP->get_result()->fetch_assoc()['total'];
     
     // Recent orders
-    $recentOrders = $conn->query(
-        "SELECT o.id, o.order_type, o.status, o.total, o.created_at, t.table_number
-         FROM orders o
-         LEFT JOIN tables t ON o.table_id = t.id
-         ORDER BY o.created_at DESC LIMIT 5"
-    )->fetch_all(MYSQLI_ASSOC);
+    if ($isAdmin) {
+        $recentOrders = $conn->query(
+            "SELECT o.id, o.order_type, o.status, o.total, o.created_at, t.table_number
+             FROM orders o
+             LEFT JOIN tables t ON o.table_id = t.id
+             ORDER BY o.created_at DESC LIMIT 5"
+        )->fetch_all(MYSQLI_ASSOC);
+    } else {
+        $stmtR = $conn->prepare(
+            "SELECT o.id, o.order_type, o.status, o.total, o.created_at, t.table_number
+             FROM orders o
+             LEFT JOIN tables t ON o.table_id = t.id
+             WHERE o.user_id = ? AND DATE(o.created_at) = ?
+             ORDER BY o.created_at DESC LIMIT 5"
+        );
+        $stmtR->bind_param("is", $userId, $today);
+        $stmtR->execute();
+        $recentOrders = $stmtR->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
     
     // Calculate growth
     $revenue_change = (float)$yesterdayStats['revenue'] > 0 
@@ -4102,149 +4196,8 @@ function getAdminDashboard()
 }
 
 // ============================================
-// ACTIVITY LOG & INVENTORY MANAGEMENT
+// INVENTORY MANAGEMENT
 // ============================================
-
-/**
- * Log an activity to the audit trail
- * Internal helper function
- */
-function logActivity($action, $entity_type, $entity_id = null, $details = null, $user_id = null)
-{
-    global $conn;
-    
-    if (!$user_id) {
-        $admin = getAdmin();
-        $user_id = $admin ? $admin['id'] : null;
-    }
-    
-    $ip_address = $_SERVER['REMOTE_ADDR'] ?? null;
-    $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
-    $details_json = $details ? json_encode($details) : null;
-    
-    $stmt = $conn->prepare(
-        "INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details, ip_address, user_agent) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)"
-    );
-    $stmt->bind_param("issssss", $user_id, $action, $entity_type, $entity_id, $details_json, $ip_address, $user_agent);
-    $stmt->execute();
-}
-
-/**
- * Get activity logs (audit trail)
- * Optional: start_date, end_date, user_id, action, entity_type, limit (default 100)
- */
-function getActivityLog()
-{
-    global $conn;
-    $admin = getAdmin();
-    if (!$admin) {
-        respond(403, ['error' => 'Unauthorized']);
-    }
-    if ($admin['role'] !== 'admin') {
-        respond(403, ['error' => 'Only admins can view activity logs']);
-    }
-    
-    $input = json_decode(file_get_contents('php://input'), true);
-    
-    $where = [];
-    $params = [];
-    $types = "";
-    
-    if (isset($input['user_id']) && $input['user_id']) {
-        $where[] = "al.user_id = ?";
-        $params[] = (int)$input['user_id'];
-        $types .= "i";
-    }
-    
-    if (isset($input['action']) && $input['action']) {
-        $where[] = "al.action LIKE ?";
-        $params[] = '%' . $input['action'] . '%';
-        $types .= "s";
-    }
-    
-    if (isset($input['entity_type']) && $input['entity_type']) {
-        $where[] = "al.entity_type = ?";
-        $params[] = $input['entity_type'];
-        $types .= "s";
-    }
-    
-    if (isset($input['start_date']) && $input['start_date']) {
-        $where[] = "DATE(al.created_at) >= ?";
-        $params[] = $input['start_date'];
-        $types .= "s";
-    }
-    
-    if (isset($input['end_date']) && $input['end_date']) {
-        $where[] = "DATE(al.created_at) <= ?";
-        $params[] = $input['end_date'];
-        $types .= "s";
-    }
-    
-    $limit = isset($input['limit']) ? (int)$input['limit'] : 100;
-    $offset = isset($input['offset']) ? (int)$input['offset'] : 0;
-    
-    $sql = "SELECT al.*, u.name as user_name, u.email as user_email, u.role as user_role
-            FROM activity_logs al
-            LEFT JOIN users u ON al.user_id = u.id";
-    
-    if (count($where) > 0) {
-        $sql .= " WHERE " . implode(" AND ", $where);
-    }
-    
-    $sql .= " ORDER BY al.created_at DESC LIMIT ? OFFSET ?";
-    $params[] = $limit;
-    $params[] = $offset;
-    $types .= "ii";
-    
-    $stmt = $conn->prepare($sql);
-    if (count($params) > 0) {
-        $stmt->bind_param($types, ...$params);
-    }
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    $logs = [];
-    while ($log = $result->fetch_assoc()) {
-        $log['details'] = $log['details'] ? json_decode($log['details'], true) : null;
-        $logs[] = $log;
-    }
-    
-    // Get total count
-    $countSql = "SELECT COUNT(*) as total FROM activity_logs al";
-    if (count($where) > 0) {
-        $countSql .= " WHERE " . implode(" AND ", $where);
-    }
-    
-    if (count($params) > 2) {
-        $countStmt = $conn->prepare($countSql);
-        $countTypes = substr($types, 0, -2);
-        $countParams = array_slice($params, 0, -2);
-        if (!empty($countParams)) {
-            $countStmt->bind_param($countTypes, ...$countParams);
-        }
-        $countStmt->execute();
-        $total = $countStmt->get_result()->fetch_assoc()['total'];
-    } else {
-        $total = $conn->query($countSql)->fetch_assoc()['total'];
-    }
-    
-    // Get available actions and entity types for filtering
-    $actions = $conn->query("SELECT DISTINCT action FROM activity_logs ORDER BY action")->fetch_all(MYSQLI_ASSOC);
-    $entityTypes = $conn->query("SELECT DISTINCT entity_type FROM activity_logs ORDER BY entity_type")->fetch_all(MYSQLI_ASSOC);
-    
-    respond('success', [
-        'logs' => $logs,
-        'count' => count($logs),
-        'total' => (int)$total,
-        'offset' => $offset,
-        'limit' => $limit,
-        'filters' => [
-            'actions' => array_column($actions, 'action'),
-            'entity_types' => array_column($entityTypes, 'entity_type')
-        ]
-    ]);
-}
 
 /**
  * Adjust inventory with reason
@@ -4305,16 +4258,6 @@ function adjustInventory()
     $stmt->bind_param("iisisiss", $product_id, $admin['id'], $adjustment_type, $abs_adjustment, $old_stock, $new_stock, $reason, $notes);
     $stmt->execute();
     $adjustment_id = $conn->insert_id;
-    
-    // Log activity
-    logActivity('inventory_adjustment', 'product', $product_id, [
-        'adjustment_id' => $adjustment_id,
-        'product_name' => $product['name'],
-        'adjustment' => $adjustment,
-        'old_stock' => $old_stock,
-        'new_stock' => $new_stock,
-        'reason' => $reason
-    ]);
     
     respond('success', [
         'message' => 'Inventory adjusted successfully.',
@@ -4654,7 +4597,7 @@ function getEndOfDayReport()
 
 /**
  * Export report data to CSV format
- * Required: report_type (orders|products|shifts|payments|inventory_adjustments|activity_logs)
+ * Required: report_type (orders|products|shifts|payments|inventory_adjustments)
  * Optional: start_date, end_date
  */
 function exportReport()
@@ -4673,7 +4616,7 @@ function exportReport()
     $start_date = isset($input['start_date']) ? $input['start_date'] : date('Y-m-d', strtotime('-30 days'));
     $end_date = isset($input['end_date']) ? $input['end_date'] : date('Y-m-d');
     
-    $valid_types = ['orders', 'products', 'shifts', 'payments', 'inventory_adjustments', 'activity_logs'];
+    $valid_types = ['orders', 'products', 'shifts', 'payments', 'inventory_adjustments'];
     if (!in_array($report_type, $valid_types)) {
         respond('error', 'Invalid report type. Valid types: ' . implode(', ', $valid_types));
     }
@@ -4778,22 +4721,6 @@ function exportReport()
             }
             break;
             
-        case 'activity_logs':
-            $headers = ['ID', 'User', 'Action', 'Entity Type', 'Entity ID', 'Details', 'IP Address', 'Created At'];
-            $stmt = $conn->prepare(
-                "SELECT al.id, u.name, al.action, al.entity_type, al.entity_id, al.details, al.ip_address, al.created_at
-                 FROM activity_logs al
-                 LEFT JOIN users u ON al.user_id = u.id
-                 WHERE DATE(al.created_at) BETWEEN ? AND ?
-                 ORDER BY al.created_at"
-            );
-            $stmt->bind_param("ss", $start_date, $end_date);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            while ($row = $result->fetch_assoc()) {
-                $csv_data[] = array_values($row);
-            }
-            break;
     }
     
     // Generate CSV string
@@ -4805,14 +4732,6 @@ function exportReport()
     rewind($output);
     $csv_string = stream_get_contents($output);
     fclose($output);
-    
-    // Log the export
-    logActivity('export_report', 'report', null, [
-        'report_type' => $report_type,
-        'start_date' => $start_date,
-        'end_date' => $end_date,
-        'rows_exported' => count($csv_data)
-    ]);
     
     respond('success', [
         'report_type' => $report_type,
@@ -5016,29 +4935,6 @@ CREATE TABLE `users` (
   `password` varchar(255) DEFAULT NULL,
   `role` varchar(255) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `activity_logs`
---
-
-CREATE TABLE `activity_logs` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `user_id` int DEFAULT NULL,
-  `action` varchar(100) NOT NULL,
-  `entity_type` varchar(50) DEFAULT NULL,
-  `entity_id` varchar(50) DEFAULT NULL,
-  `details` text DEFAULT NULL,
-  `ip_address` varchar(45) DEFAULT NULL,
-  `user_agent` text DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `user_id` (`user_id`),
-  KEY `action` (`action`),
-  KEY `entity_type` (`entity_type`),
-  KEY `created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
 
 -- --------------------------------------------------------
