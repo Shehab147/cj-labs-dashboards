@@ -17,3 +17,15 @@ npm run build
 pm2 restart x-station || pm2 start npm --name x-station -- run start
 
 echo "✅ x-station dashboard deployed successfully"
+
+
+
+
+cd /apps/cj-labs-dashboards/royaldonut
+
+npm install --legacy-peer-deps
+npm run build
+
+pm2 restart royaldonut || pm2 start npm --name royaldonut -- run start
+
+echo "✅ royaldonut dashboard deployed successfully"
