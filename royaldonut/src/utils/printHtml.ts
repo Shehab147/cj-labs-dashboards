@@ -1,8 +1,8 @@
 /**
  * Print HTML content.
- * If running inside pywebview (desktop app), calls the exposed print_html_direct API
- * which converts to PDF via wkhtmltopdf and sends to the default printer.
- * Otherwise, falls back to a hidden iframe for printing (works in webview and browsers).
+ * In pywebview (desktop app): sends HTML to Python which saves as temp file
+ * and triggers the native Windows print dialog via ShellExecute.
+ * In browser: uses hidden iframe with window.print().
  */
 export function printHtml(html: string): void {
   const pywebview = typeof window !== 'undefined' ? (window as any).pywebview : null
@@ -10,7 +10,7 @@ export function printHtml(html: string): void {
   if (pywebview?.api?.print_html_direct) {
     pywebview.api.print_html_direct(html)
   } else {
-    // Hidden iframe approach — works inside pywebview and regular browsers
+    // Browser fallback: hidden iframe
     const iframe = document.createElement('iframe')
 
     iframe.style.position = 'fixed'
