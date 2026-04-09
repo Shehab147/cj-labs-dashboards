@@ -47,7 +47,13 @@ def print_html_direct(html_content):
             check=True,
             capture_output=True
         )
-        subprocess.run(['lpr', pdf_path], check=True)
+
+        # macOS/Linux: use lpr. Windows: use Shell print verb on the generated PDF.
+        if os.name == 'nt':
+            os.startfile(pdf_path, 'print')
+        else:
+            subprocess.run(['lpr', pdf_path], check=True)
+
         return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
