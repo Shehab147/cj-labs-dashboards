@@ -20,12 +20,12 @@ echo "✅ x-station dashboard deployed successfully"
 
 
 
-
 cd /apps/cj-labs-dashboards/royaldonut
 
 npm install --legacy-peer-deps
 npm run build
 
-pm2 restart royaldonut || pm2 start npm --name royaldonut -- run start
+PORT=3001 pm2 restart royaldonut --update-env || \
+PORT=3001 pm2 start npm --name royaldonut -- run start
 
-echo "✅ royaldonut dashboard deployed successfully"
+echo "✅ royaldonut dashboard deployed successfully on port 3001"
