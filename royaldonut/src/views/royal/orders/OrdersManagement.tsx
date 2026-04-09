@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, Fragment } from 'react'
+import { printHtml } from '@/utils/printHtml'
 import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import Button from '@mui/material/Button'
@@ -198,8 +199,7 @@ const OrdersManagement = () => {
         <p>الدفع: ${PAYMENT_LABELS[detail.payment_status] || detail.payment_status}</p>
         <script>window.print();</script>
       </body></html>`
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    printHtml(html)
   }
 
   if (isLoading) {

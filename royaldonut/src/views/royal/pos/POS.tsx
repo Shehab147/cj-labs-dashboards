@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { printHtml } from '@/utils/printHtml'
 import Grid from '@mui/material/Grid'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
@@ -266,8 +267,7 @@ const POS = () => {
         <script>window.print();</script>
       </body></html>
     `
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    printHtml(html)
   }
 
   if (isLoading) return <div className='flex items-center justify-center min-h-[400px]'><CircularProgress /></div>

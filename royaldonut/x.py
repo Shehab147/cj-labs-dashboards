@@ -15,34 +15,18 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Global window reference for API functions
 _window = None
 
-def print_html_direct(html_content):
-    """Print HTML content directly to the default printer"""
-    try:
-        with tempfile.NamedTemporaryFile(suffix='.html', delete=False, mode='w', encoding='utf-8') as tmp_file:
-            tmp_file.write(html_content)
-            tmp_path = tmp_file.name
-        
-        pdf_path = tmp_path.replace('.html', '.pdf')
-        subprocess.run(['wkhtmltopdf', '--page-size', 'A4', '--margin-top', '5mm', 
-                       '--margin-bottom', '5mm', '--margin-left', '5mm', 
-                       '--margin-right', '5mm', tmp_path, pdf_path], 
-                      check=True, capture_output=True, shell=True)
-        os.startfile(pdf_path, 'print')
-        return {'success': True}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
 def print_page():
     """Trigger browser print dialog"""
     if _window:
         _window.evaluate_js('window.print()')
 
 def print_html(html_content):
-    """Print HTML content by creating a temp file and opening it"""
+    """Print HTML content: save to temp file and send directly to default printer via Windows"""
     try:
         with tempfile.NamedTemporaryFile(suffix='.html', delete=False, mode='w', encoding='utf-8') as tmp_file:
             tmp_file.write(html_content)
             tmp_path = tmp_file.name
+        # Open in default browser which will auto-trigger window.print() from the HTML
         os.startfile(tmp_path)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
@@ -215,6 +199,7 @@ if __name__ == '__main__':
     _window = window
 
     window.expose(print_page)
+    window.expose(print_html)
     window.expose(download_and_print_pdf)
     window.expose(open_pdf)
 
