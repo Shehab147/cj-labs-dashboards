@@ -14,6 +14,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Global window reference for API functions
 _window = None
+
 def print_html_direct(html_content):
     """Print HTML content directly to the default printer"""
     try:
@@ -22,50 +23,42 @@ def print_html_direct(html_content):
             tmp_path = tmp_file.name
         
         pdf_path = tmp_path.replace('.html', '.pdf')
-        
-        # Convert HTML to PDF and print directly
         subprocess.run(['wkhtmltopdf', '--page-size', 'A4', '--margin-top', '5mm', 
                        '--margin-bottom', '5mm', '--margin-left', '5mm', 
                        '--margin-right', '5mm', tmp_path, pdf_path], 
                       check=True, capture_output=True, shell=True)
-        # Windows: print using ShellExecute
         os.startfile(pdf_path, 'print')
         return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
+
 def print_page():
     """Trigger browser print dialog"""
     if _window:
         _window.evaluate_js('window.print()')
+
 def print_html(html_content):
     """Print HTML content by creating a temp file and opening it"""
     try:
         with tempfile.NamedTemporaryFile(suffix='.html', delete=False, mode='w', encoding='utf-8') as tmp_file:
             tmp_file.write(html_content)
             tmp_path = tmp_file.name
-        
-        # Windows: open with default browser
         os.startfile(tmp_path)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
+
 def download_and_print_pdf(url):
     """Download PDF from URL and open it for printing"""
     try:
-        # Create a temporary file for the PDF
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
-            # Download the PDF
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-            
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, context=ctx) as response:
                 tmp_file.write(response.read())
-            
             tmp_path = tmp_file.name
-        
-        # Windows: open PDF with default application
         os.startfile(tmp_path)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
@@ -74,23 +67,71 @@ def download_and_print_pdf(url):
 def open_pdf(url):
     """Open PDF URL in default PDF viewer"""
     try:
-        # Create a temporary file for the PDF
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-            
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, context=ctx) as response:
                 tmp_file.write(response.read())
-            
             tmp_path = tmp_file.name
-        
-        # Windows: open with default PDF viewer
         os.startfile(tmp_path)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
+
+
+# ── JS injected after every page load to intercept about: navigations ────────
+INTERCEPT_JS = """
+(function() {
+    if (window.__cj_intercept_installed__) return;
+    window.__cj_intercept_installed__ = true;
+
+    // Intercept clicks on any <a href="about:..."> links
+    document.addEventListener('click', function(e) {
+        var el = e.target.closest('a');
+        if (el && el.href && el.href.startsWith('about:')) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.print();
+        }
+    }, true);
+
+    // Intercept window.open('about:...')
+    var _open = window.open;
+    window.open = function(url) {
+        if (url && typeof url === 'string' && url.startsWith('about:')) {
+            window.print();
+            return null;
+        }
+        return _open.apply(this, arguments);
+    };
+
+    // Intercept location.assign / location.replace targeting about:
+    var _assign  = window.location.assign.bind(window.location);
+    var _replace = window.location.replace.bind(window.location);
+    window.location.assign = function(url) {
+        if (url && typeof url === 'string' && url.startsWith('about:')) {
+            window.print();
+            return;
+        }
+        return _assign(url);
+    };
+    window.location.replace = function(url) {
+        if (url && typeof url === 'string' && url.startsWith('about:')) {
+            window.print();
+            return;
+        }
+        return _replace(url);
+    };
+})();
+"""
+
+def on_loaded():
+    """Inject intercept script every time a page finishes loading"""
+    if _window:
+        _window.evaluate_js(INTERCEPT_JS)
+
 
 LOADING_HTML = """
     <style>
@@ -99,7 +140,6 @@ LOADING_HTML = """
             color: white;
             font-family: Helvetica Neue, Helvetica, Arial, sans-serif;
         }
-
         .main-container {
             width: 100%;
             height: 90vh;
@@ -111,7 +151,6 @@ LOADING_HTML = """
             -webkit-justify-content: center;
             overflow: hidden;
         }
-
         .loader {
           font-size: 10px;
           margin: 50px auto;
@@ -122,8 +161,6 @@ LOADING_HTML = """
           background: #ffffff;
           background: -moz-linear-gradient(left, #ffffff 10%, rgba(255, 255, 255, 0) 42%);
           background: -webkit-linear-gradient(left, #ffffff 10%, rgba(255, 255, 255, 0) 42%);
-          background: -o-linear-gradient(left, #ffffff 10%, rgba(255, 255, 255, 0) 42%);
-          background: -ms-linear-gradient(left, #ffffff 10%, rgba(255, 255, 255, 0) 42%);
           background: linear-gradient(to right, #ffffff 10%, rgba(255, 255, 255, 0) 42%);
           position: relative;
           -webkit-animation: load3 1.4s infinite linear;
@@ -133,34 +170,22 @@ LOADING_HTML = """
           transform: translateZ(0);
         }
         .loader:before {
-          width: 50%;
-          height: 50%;
-          background: #ffffff;
+          width: 50%; height: 50%; background: #ffffff;
           border-radius: 100% 0 0 0;
-          position: absolute;
-          top: 0;
-          left: 0;
-          content: '';
+          position: absolute; top: 0; left: 0; content: '';
         }
         .loader:after {
-          background: #333;
-          width: 75%;
-          height: 75%;
-          border-radius: 50%;
-          content: '';
-          margin: auto;
-          position: absolute;
-          top: 0;
-          left: 0;
-          bottom: 0;
-          right: 0;
+          background: #333; width: 75%; height: 75%;
+          border-radius: 50%; content: '';
+          margin: auto; position: absolute;
+          top: 0; left: 0; bottom: 0; right: 0;
         }
         @-webkit-keyframes load3 {
-          0% { -webkit-transform: rotate(0deg); transform: rotate(0deg); }
+          0%   { -webkit-transform: rotate(0deg);   transform: rotate(0deg);   }
           100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
         }
         @keyframes load3 {
-          0% { -webkit-transform: rotate(0deg); transform: rotate(0deg); }
+          0%   { -webkit-transform: rotate(0deg);   transform: rotate(0deg);   }
           100% { -webkit-transform: rotate(360deg); transform: rotate(360deg); }
         }
     </style>
@@ -181,20 +206,20 @@ if __name__ == '__main__':
     window = webview.create_window(
         title='RoyalDonuts',
         html=LOADING_HTML,
-        # Set to fullscreen but with a small margin for window controls
         width=1920,
         height=1080,
         resizable=True,
         background_color='#333333'
     )
-    
-    # Store global window reference for API functions
+
     _window = window
-    
-    # Expose individual functions (not class instance)
+
     window.expose(print_page)
     window.expose(download_and_print_pdf)
     window.expose(open_pdf)
-    
+
+    # Inject the about: intercept script every time a page finishes loading
+    window.events.loaded += on_loaded
+
     threading.Thread(target=load_after_ready, args=(window,), daemon=True).start()
     webview.start()
