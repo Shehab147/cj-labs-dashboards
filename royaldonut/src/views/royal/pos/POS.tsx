@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { printHtml } from '@/utils/printHtml'
 import Grid from '@mui/material/Grid'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
@@ -264,9 +263,11 @@ const POS = () => {
         <p>طريقة الدفع: ${lastOrder.payment_method === 'cash' ? 'نقدي' : lastOrder.payment_method === 'card' ? 'بطاقة' : lastOrder.payment_method}</p>
         <hr/>
         <p class="center">شكراً لزيارتكم!</p>
+        <script>window.print();</script>
       </body></html>
     `
-    printHtml(html)
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
   }
 
   if (isLoading) return <div className='flex items-center justify-center min-h-[400px]'><CircularProgress /></div>

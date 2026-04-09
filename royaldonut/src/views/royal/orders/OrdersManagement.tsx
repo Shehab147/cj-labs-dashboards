@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback, Fragment } from 'react'
-import { printHtml } from '@/utils/printHtml'
 import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import Button from '@mui/material/Button'
@@ -197,8 +196,10 @@ const OrdersManagement = () => {
         <p>الإجمالي: <strong>${parseFloat(detail.total||0).toFixed(2)} ج.م</strong></p>
         <p>الحالة: ${STATUS_LABELS[detail.order_status] || detail.order_status}</p>
         <p>الدفع: ${PAYMENT_LABELS[detail.payment_status] || detail.payment_status}</p>
+        <script>window.print();</script>
       </body></html>`
-    printHtml(html)
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
   }
 
   if (isLoading) {

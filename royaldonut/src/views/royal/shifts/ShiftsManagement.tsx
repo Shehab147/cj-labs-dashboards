@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { printHtml } from '@/utils/printHtml'
 import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import CardContent from '@mui/material/CardContent'
@@ -83,8 +82,10 @@ const ShiftsManagement = () => {
           <tr><td>إجمالي المبيعات</td><td class="value">${parseFloat(shift.shift_revenue || 0).toFixed(2)} ج.م</td></tr>
           <tr><td>عدد الطلبات</td><td class="value">${shift.orders_count || 0}</td></tr>
         </table>
+        <script>window.print();</script>
       </body></html>`
-    printHtml(html)
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
   }
 
   // Compute totals for cashier shifts
