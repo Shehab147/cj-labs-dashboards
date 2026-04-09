@@ -27,8 +27,9 @@ def print_html_direct(html_content):
         subprocess.run(['wkhtmltopdf', '--page-size', 'A4', '--margin-top', '5mm', 
                        '--margin-bottom', '5mm', '--margin-left', '5mm', 
                        '--margin-right', '5mm', tmp_path, pdf_path], 
-                      check=True, capture_output=True)
-        subprocess.run(['lpr', pdf_path], check=True)
+                      check=True, capture_output=True, shell=True)
+        # Windows: print using ShellExecute
+        os.startfile(pdf_path, 'print')
         return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -43,7 +44,8 @@ def print_html(html_content):
             tmp_file.write(html_content)
             tmp_path = tmp_file.name
         
-        subprocess.run(['open', tmp_path], check=True)
+        # Windows: open with default browser
+        os.startfile(tmp_path)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -63,8 +65,8 @@ def download_and_print_pdf(url):
             
             tmp_path = tmp_file.name
         
-        # Open PDF with default application (Preview on macOS) for printing
-        subprocess.run(['open', tmp_path], check=True)
+        # Windows: open PDF with default application
+        os.startfile(tmp_path)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -84,7 +86,8 @@ def open_pdf(url):
             
             tmp_path = tmp_file.name
         
-        subprocess.run(['open', tmp_path], check=True)
+        # Windows: open with default PDF viewer
+        os.startfile(tmp_path)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
