@@ -13,7 +13,13 @@ import PreviewCard from './PreviewCard'
 const Preview = ({ invoiceData, id }: { invoiceData?: InvoiceType; id: string }) => {
   // Handle Print Button Click
   const handleButtonClick = () => {
-    window.print()
+    const pywebview = typeof window !== 'undefined' ? (window as any).pywebview : null
+
+    if (pywebview?.api?.print_page) {
+      pywebview.api.print_page()
+    } else {
+      window.print()
+    }
   }
 
   return (

@@ -1,9 +1,9 @@
 import webview
 import threading
 import time
-import os
 import ssl
 import urllib3
+import subprocess
 import tempfile
 import urllib.request
 
@@ -15,17 +15,25 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _window = None
 
 def print_html_direct(html_content):
-    """Print HTML content using Windows native print verb on associated app."""
+    """Print HTML content directly to the default printer"""
     try:
         with tempfile.NamedTemporaryFile(suffix='.html', delete=False, mode='w', encoding='utf-8') as tmp_file:
             tmp_file.write(html_content)
             tmp_path = tmp_file.name
 
-        if os.name != 'nt':
-            return {'success': False, 'error': 'Native print is supported on Windows only'}
+        pdf_path = tmp_path.replace('.html', '.pdf')
 
-        # Native Windows printing through shell association (no about: navigation).
-        os.startfile(tmp_path, 'print')
+        # Convert HTML to PDF and print directly
+        subprocess.run(
+            [
+                'wkhtmltopdf', '--page-size', 'A4', '--margin-top', '5mm',
+                '--margin-bottom', '5mm', '--margin-left', '5mm',
+                '--margin-right', '5mm', tmp_path, pdf_path
+            ],
+            check=True,
+            capture_output=True
+        )
+        subprocess.run(['lpr', pdf_path], check=True)
         return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -41,7 +49,7 @@ def print_html(html_content):
         with tempfile.NamedTemporaryFile(suffix='.html', delete=False, mode='w', encoding='utf-8') as tmp_file:
             tmp_file.write(html_content)
             tmp_path = tmp_file.name
-        os.startfile(tmp_path)
+        subprocess.run(['open', tmp_path], check=True)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -57,7 +65,7 @@ def download_and_print_pdf(url):
             with urllib.request.urlopen(req, context=ctx) as response:
                 tmp_file.write(response.read())
             tmp_path = tmp_file.name
-        os.startfile(tmp_path)
+        subprocess.run(['open', tmp_path], check=True)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -73,7 +81,7 @@ def open_pdf(url):
             with urllib.request.urlopen(req, context=ctx) as response:
                 tmp_file.write(response.read())
             tmp_path = tmp_file.name
-        os.startfile(tmp_path)
+        subprocess.run(['open', tmp_path], check=True)
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
