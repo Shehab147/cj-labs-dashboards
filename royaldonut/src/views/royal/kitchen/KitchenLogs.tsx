@@ -133,7 +133,6 @@ const KitchenLogs = () => {
               <td>${parseFloat(item.current_qty) <= parseFloat(item.min_qty) ? '⚠️ منخفض' : '✓ كافٍ'}</td>
             </tr>`).join('')}
         </table>
-        <script>window.print();</script>
       </body></html>`
     printHtml(html)
   }

@@ -187,7 +187,6 @@ const InventoryManagement = () => {
               <td>${parseFloat(item.current_qty) <= parseFloat(item.min_qty) ? '⚠️ منخفض' : item.is_active ? '✓ نشط' : '— غير نشط'}</td>
             </tr>`).join('')}
         </table>
-        <script>window.print();</script>
       </body></html>`
     printHtml(html)
   }

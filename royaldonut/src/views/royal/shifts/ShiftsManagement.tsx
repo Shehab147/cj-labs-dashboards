@@ -83,7 +83,6 @@ const ShiftsManagement = () => {
           <tr><td>إجمالي المبيعات</td><td class="value">${parseFloat(shift.shift_revenue || 0).toFixed(2)} ج.م</td></tr>
           <tr><td>عدد الطلبات</td><td class="value">${shift.orders_count || 0}</td></tr>
         </table>
-        <script>window.print();</script>
       </body></html>`
     printHtml(html)
   }

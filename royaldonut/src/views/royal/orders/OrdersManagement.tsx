@@ -197,7 +197,6 @@ const OrdersManagement = () => {
         <p>الإجمالي: <strong>${parseFloat(detail.total||0).toFixed(2)} ج.م</strong></p>
         <p>الحالة: ${STATUS_LABELS[detail.order_status] || detail.order_status}</p>
         <p>الدفع: ${PAYMENT_LABELS[detail.payment_status] || detail.payment_status}</p>
-        <script>window.print();</script>
       </body></html>`
     printHtml(html)
   }

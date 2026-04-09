@@ -264,7 +264,6 @@ const POS = () => {
         <p>طريقة الدفع: ${lastOrder.payment_method === 'cash' ? 'نقدي' : lastOrder.payment_method === 'card' ? 'بطاقة' : lastOrder.payment_method}</p>
         <hr/>
         <p class="center">شكراً لزيارتكم!</p>
-        <script>window.print();</script>
       </body></html>
     `
     printHtml(html)
