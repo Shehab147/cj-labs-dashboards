@@ -24,7 +24,6 @@ import Alert from '@mui/material/Alert'
 
 import { refundApi } from '@/services/api'
 import { useDictionary } from '@/contexts/dictionaryContext'
-import { formatLocalDateTime } from '@/utils/timezone'
 
 const RefundsManagement = () => {
   const t = useDictionary()
@@ -109,7 +108,7 @@ const RefundsManagement = () => {
                       <Chip label={parseFloat(r.amount).toFixed(2)} size='small' color='error' />
                     </TableCell>
                     <TableCell>{r.reason}</TableCell>
-                    <TableCell>{r.created_at ? formatLocalDateTime(r.created_at) : '-'}</TableCell>
+                    <TableCell>{r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</TableCell>
                   </TableRow>
                 ))
               )}

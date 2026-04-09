@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { printHtml } from '@/utils/printHtml'
 import Grid from '@mui/material/Grid'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
@@ -27,7 +26,6 @@ import Tab from '@mui/material/Tab'
 
 import { menuApi, orderApi, cashierShiftApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
-import { formatInCairo, formatLocalTime } from '@/utils/timezone'
 
 interface CartItem {
   menu_item_id: number
@@ -249,7 +247,7 @@ const POS = () => {
       <body>
         <h2>🍩 رويال دونتس</h2>
         <p class="center">${lastOrder.order_number || `#${lastOrder.id}`}</p>
-        <p class="center">${formatInCairo(new Date(), 'ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true })}</p>
+        <p class="center">${new Date().toLocaleString('ar-SA')}</p>
         <hr/>
         ${lastOrder.customer_name ? `<p>العميل: ${lastOrder.customer_name}</p>` : ''}
         ${lastOrder.customer_phone ? `<p>الهاتف: ${lastOrder.customer_phone}</p>` : ''}
@@ -264,9 +262,11 @@ const POS = () => {
         <p>طريقة الدفع: ${lastOrder.payment_method === 'cash' ? 'نقدي' : lastOrder.payment_method === 'card' ? 'بطاقة' : lastOrder.payment_method}</p>
         <hr/>
         <p class="center">شكراً لزيارتكم!</p>
+        <script>window.print();</script>
       </body></html>
     `
-    printHtml(html)
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
   }
 
   if (isLoading) return <div className='flex items-center justify-center min-h-[400px]'><CircularProgress /></div>
@@ -310,7 +310,7 @@ const POS = () => {
         <Box className='flex items-center gap-2'>
           <Chip label='وردية نشطة' color='success' size='small' />
           <Typography variant='body2' color='text.secondary'>
-            بدأت: {currentShift?.started_at ? formatLocalTime(currentShift.started_at, 'ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
+            بدأت: {currentShift?.started_at ? new Date(currentShift.started_at).toLocaleTimeString('ar-SA') : ''}
             {currentShift?.opening_cash && ` · افتتاح: ${parseFloat(currentShift.opening_cash).toFixed(2)} ج.م`}
           </Typography>
         </Box>

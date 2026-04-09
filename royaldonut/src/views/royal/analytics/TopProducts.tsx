@@ -19,17 +19,16 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 
 import { reportsApi } from '@/services/api'
-import { formatInCairo } from '@/utils/timezone'
 import CustomAvatar from '@core/components/mui/Avatar'
 
-const today = () => formatInCairo(new Date(), 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+const today = () => new Date().toISOString().split('T')[0]
 
 const monthStart = () => {
   const d = new Date()
 
   d.setDate(1)
 
-  return formatInCairo(d, 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return d.toISOString().split('T')[0]
 }
 
 const TopProducts = () => {

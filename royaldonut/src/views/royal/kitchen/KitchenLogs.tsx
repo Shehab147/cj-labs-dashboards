@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { printHtml } from '@/utils/printHtml'
 import Grid from '@mui/material/Grid'
 import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
@@ -29,7 +28,6 @@ import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
 
 import { stockApi } from '@/services/api'
-import { formatInCairo, formatLocalDate } from '@/utils/timezone'
 
 const TRANSACTION_TYPES = [
   { value: 'purchase', label: 'شراء / توريد', color: 'success' as const },
@@ -121,7 +119,7 @@ const KitchenLogs = () => {
       @media print{button{display:none}}</style></head>
       <body>
         <h3>🍩 رويال دونتس — تقرير المخزون</h3>
-        <p style="text-align:center">${formatInCairo(new Date(), 'ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true })}</p>
+        <p style="text-align:center">${new Date().toLocaleString('ar-SA')}</p>
         <table>
           <tr><th>الصنف</th><th>الوحدة</th><th>الكمية الحالية</th><th>الحد الأدنى</th><th>الحالة</th></tr>
           ${stockItems.map(item => `
@@ -133,8 +131,10 @@ const KitchenLogs = () => {
               <td>${parseFloat(item.current_qty) <= parseFloat(item.min_qty) ? '⚠️ منخفض' : '✓ كافٍ'}</td>
             </tr>`).join('')}
         </table>
+        <script>window.print();</script>
       </body></html>`
-    printHtml(html)
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
   }
 
   if (isLoading) return <div className='flex items-center justify-center min-h-[400px]'><CircularProgress /></div>
@@ -286,7 +286,7 @@ const KitchenLogs = () => {
                           </TableCell>
                           <TableCell>
                             <Typography variant='caption' color='text.secondary'>
-                              {tx.created_at ? formatLocalDate(tx.created_at, 'ar-SA') : '—'}
+                              {tx.created_at ? new Date(tx.created_at).toLocaleDateString('ar-SA') : '—'}
                             </Typography>
                           </TableCell>
                         </TableRow>

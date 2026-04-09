@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback, Fragment } from 'react'
-import { printHtml } from '@/utils/printHtml'
 import Card from '@mui/material/Card'
 import CardHeader from '@mui/material/CardHeader'
 import Button from '@mui/material/Button'
@@ -31,7 +30,6 @@ import Tooltip from '@mui/material/Tooltip'
 
 import { orderApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
-import { formatInCairo, formatLocalDateTime } from '@/utils/timezone'
 
 const STATUS_COLORS: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info'> = {
   pending: 'default',
@@ -56,10 +54,10 @@ const PAYMENT_LABELS: Record<string, string> = {
   partially_refunded: 'مسترد جزئياً',
 }
 
-const today = () => formatInCairo(new Date(), 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+const today = () => new Date().toISOString().split('T')[0]
 const weekAgo = () => {
   const d = new Date(); d.setDate(d.getDate() - 7)
-  return formatInCairo(d, 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return d.toISOString().split('T')[0]
 }
 
 const OrdersManagement = () => {
@@ -189,7 +187,7 @@ const OrdersManagement = () => {
       @media print{button{display:none}}</style></head>
       <body>
         <h3>🍩 رويال دونتس</h3>
-        <p><strong>${detail.order_number || `#${detail.id}`}</strong> &nbsp;|&nbsp; ${formatLocalDateTime(detail.created_at, 'ar-SA')}</p>
+        <p><strong>${detail.order_number || `#${detail.id}`}</strong> &nbsp;|&nbsp; ${new Date(detail.created_at || '').toLocaleString('ar-SA')}</p>
         ${detail.customer_name ? `<p>العميل: ${detail.customer_name}</p>` : ''}
         <table><tr><th>الصنف</th><th>ك</th><th>المجموع</th></tr>
         ${(items || []).map((i: any) => `<tr><td>${i.item_name || i.name || '-'}</td><td>${i.quantity || i.qty || 0}</td><td>${parseFloat(i.line_total || i.total_price || i.total || 0).toFixed(2)}</td></tr>`).join('')}
@@ -197,8 +195,10 @@ const OrdersManagement = () => {
         <p>الإجمالي: <strong>${parseFloat(detail.total||0).toFixed(2)} ج.م</strong></p>
         <p>الحالة: ${STATUS_LABELS[detail.order_status] || detail.order_status}</p>
         <p>الدفع: ${PAYMENT_LABELS[detail.payment_status] || detail.payment_status}</p>
+        <script>window.print();</script>
       </body></html>`
-    printHtml(html)
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
   }
 
   if (isLoading) {
@@ -305,7 +305,7 @@ const OrdersManagement = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant='caption' color='text.secondary'>
-                          {order.created_at ? formatLocalDateTime(order.created_at, 'ar-SA') : '—'}
+                          {order.created_at ? new Date(order.created_at).toLocaleString('ar-SA') : '—'}
                         </Typography>
                       </TableCell>
                       <TableCell align='right' onClick={e => e.stopPropagation()}>
