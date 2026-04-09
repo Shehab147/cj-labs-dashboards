@@ -29,6 +29,7 @@ import Grid from '@mui/material/Grid'
 import Tooltip from '@mui/material/Tooltip'
 
 import { orderApi } from '@/services/api'
+import { printHtml } from '@/utils/printHtml'
 import { useAuth } from '@/contexts/authContext'
 
 const STATUS_COLORS: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info'> = {
@@ -197,8 +198,7 @@ const OrdersManagement = () => {
         <p>الدفع: ${PAYMENT_LABELS[detail.payment_status] || detail.payment_status}</p>
         <script>window.print();</script>
       </body></html>`
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    printHtml(html)
   }
 
   if (isLoading) {

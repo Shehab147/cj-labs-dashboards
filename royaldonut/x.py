@@ -4,7 +4,6 @@ import time
 import os
 import ssl
 import urllib3
-import subprocess
 import tempfile
 import urllib.request
 
@@ -16,18 +15,17 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _window = None
 
 def print_html_direct(html_content):
-    """Print HTML content directly to the default printer"""
+    """Print HTML content using Windows native print verb on associated app."""
     try:
         with tempfile.NamedTemporaryFile(suffix='.html', delete=False, mode='w', encoding='utf-8') as tmp_file:
             tmp_file.write(html_content)
             tmp_path = tmp_file.name
-        
-        pdf_path = tmp_path.replace('.html', '.pdf')
-        subprocess.run(['wkhtmltopdf', '--page-size', 'A4', '--margin-top', '5mm', 
-                       '--margin-bottom', '5mm', '--margin-left', '5mm', 
-                       '--margin-right', '5mm', tmp_path, pdf_path], 
-                      check=True, capture_output=True, shell=True)
-        os.startfile(pdf_path, 'print')
+
+        if os.name != 'nt':
+            return {'success': False, 'error': 'Native print is supported on Windows only'}
+
+        # Native Windows printing through shell association (no about: navigation).
+        os.startfile(tmp_path, 'print')
         return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -79,58 +77,6 @@ def open_pdf(url):
         return {'success': True, 'path': tmp_path}
     except Exception as e:
         return {'success': False, 'error': str(e)}
-
-
-# ── JS injected after every page load to intercept about: navigations ────────
-INTERCEPT_JS = """
-(function() {
-    if (window.__cj_intercept_installed__) return;
-    window.__cj_intercept_installed__ = true;
-
-    // Intercept clicks on any <a href="about:..."> links
-    document.addEventListener('click', function(e) {
-        var el = e.target.closest('a');
-        if (el && el.href && el.href.startsWith('about:')) {
-            e.preventDefault();
-            e.stopPropagation();
-            window.print();
-        }
-    }, true);
-
-    // Intercept window.open('about:...')
-    var _open = window.open;
-    window.open = function(url) {
-        if (url && typeof url === 'string' && url.startsWith('about:')) {
-            window.print();
-            return null;
-        }
-        return _open.apply(this, arguments);
-    };
-
-    // Intercept location.assign / location.replace targeting about:
-    var _assign  = window.location.assign.bind(window.location);
-    var _replace = window.location.replace.bind(window.location);
-    window.location.assign = function(url) {
-        if (url && typeof url === 'string' && url.startsWith('about:')) {
-            window.print();
-            return;
-        }
-        return _assign(url);
-    };
-    window.location.replace = function(url) {
-        if (url && typeof url === 'string' && url.startsWith('about:')) {
-            window.print();
-            return;
-        }
-        return _replace(url);
-    };
-})();
-"""
-
-def on_loaded():
-    """Inject intercept script every time a page finishes loading"""
-    if _window:
-        _window.evaluate_js(INTERCEPT_JS)
 
 
 LOADING_HTML = """
@@ -214,12 +160,10 @@ if __name__ == '__main__':
 
     _window = window
 
+    window.expose(print_html_direct)
     window.expose(print_page)
     window.expose(download_and_print_pdf)
     window.expose(open_pdf)
-
-    # Inject the about: intercept script every time a page finishes loading
-    window.events.loaded += on_loaded
 
     threading.Thread(target=load_after_ready, args=(window,), daemon=True).start()
     webview.start()

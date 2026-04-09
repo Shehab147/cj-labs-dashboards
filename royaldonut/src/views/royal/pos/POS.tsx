@@ -26,6 +26,7 @@ import Tab from '@mui/material/Tab'
 
 import { menuApi, orderApi, cashierShiftApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
+import { printHtml } from '@/utils/printHtml'
 
 interface CartItem {
   menu_item_id: number
@@ -265,8 +266,7 @@ const POS = () => {
         <script>window.print();</script>
       </body></html>
     `
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    printHtml(html)
   }
 
   if (isLoading) return <div className='flex items-center justify-center min-h-[400px]'><CircularProgress /></div>

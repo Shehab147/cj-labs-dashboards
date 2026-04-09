@@ -23,6 +23,7 @@ import Tab from '@mui/material/Tab'
 import Tooltip from '@mui/material/Tooltip'
 
 import { reportsApi } from '@/services/api'
+import { printHtml } from '@/utils/printHtml'
 import CustomAvatar from '@core/components/mui/Avatar'
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -83,8 +84,7 @@ const ShiftsManagement = () => {
         </table>
         <script>window.print();</script>
       </body></html>`
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    printHtml(html)
   }
 
   // Compute totals for cashier shifts

@@ -32,6 +32,7 @@ import Tooltip from '@mui/material/Tooltip'
 
 import { stockApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
+import { printHtml } from '@/utils/printHtml'
 
 const TRANSACTION_TYPES = [
   { value: 'purchase', label: 'شراء / توريد', color: 'success' as const },
@@ -187,8 +188,7 @@ const InventoryManagement = () => {
         </table>
         <script>window.print();</script>
       </body></html>`
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    printHtml(html)
   }
 
   if (isLoading) return <div className='flex items-center justify-center min-h-[400px]'><CircularProgress /></div>
