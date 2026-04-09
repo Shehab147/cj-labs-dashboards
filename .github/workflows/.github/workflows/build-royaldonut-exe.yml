@@ -1,0 +1,51 @@
+name: Build X-Station Windows EXE
+
+on:
+  push:
+    paths:
+      - 'royaldonut/x.py'
+      - 'royaldonut/public/royal-donuts-logo.jpg'
+      - '.github/workflows/build-royaldonut-exe.yml'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pywebview pyinstaller pillow urllib3
+
+      - name: Convert JPEG to ICO
+        run: |
+          python -c "
+from PIL import Image
+img = Image.open('royaldonut/public/royal-donuts-logo.jpg')
+img = img.convert('RGBA')
+sizes = [(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)]
+icons = [img.resize(size) for size in sizes]
+icons[0].save('royaldonut/royaldonut.ico', format='ICO', sizes=sizes, append_images=icons[1:])
+print('ICO created successfully')
+          "
+
+      - name: Build EXE with PyInstaller
+        working-directory: royaldonut
+        run: |
+          pyinstaller --name "RoyalDonuts" --windowed --onefile --icon=royaldonut.ico x.py
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoyalDonuts
+          path: royaldonut/dist/RoyalDonuts.exe
+          retention-days: 30

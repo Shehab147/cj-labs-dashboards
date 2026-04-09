@@ -184,7 +184,7 @@ const AdminDashboard = () => {
           <Grid size={{ xs: 12, sm: 6 }}>
             <Card>
               <CardContent className='flex flex-col items-center gap-2 p-6'>
-                <CustomAvatar variant='rounded' color='default' skin='light' size={48}>
+                <CustomAvatar variant='rounded' color='secondary' skin='light' size={48}>
                   <i className='tabler-clock text-2xl' />
                 </CustomAvatar>
                 <Typography variant='h4'>{pendingCount}</Typography>
