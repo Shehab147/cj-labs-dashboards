@@ -35,17 +35,9 @@ def print_html_direct(html_content):
             tmp_file.write(html_content)
             tmp_path = tmp_file.name
 
-        if os.name == 'nt':
-            os.startfile(tmp_path, 'print')
-            return {'success': True}
-
         pdf_path = tmp_path.replace('.html', '.pdf')
 
-        if not shutil.which('wkhtmltopdf'):
-            _open_file(tmp_path)
-            return {'success': True, 'path': tmp_path, 'note': 'wkhtmltopdf not found, opened HTML for manual print'}
-
-        # Convert HTML to PDF then print
+        # Convert HTML to PDF and print directly
         subprocess.run(
             [
                 'wkhtmltopdf', '--page-size', 'A4', '--margin-top', '5mm',
@@ -55,12 +47,7 @@ def print_html_direct(html_content):
             check=True,
             capture_output=True
         )
-
-        if shutil.which('lpr'):
-            subprocess.run(['lpr', pdf_path], check=True)
-        else:
-            _open_file(pdf_path)
-
+        subprocess.run(['lpr', pdf_path], check=True)
         return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}

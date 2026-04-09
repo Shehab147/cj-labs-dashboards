@@ -1,33 +1,39 @@
 /**
  * Print HTML content.
- * In pywebview (desktop app): sends HTML to Python which saves as temp file
- * and triggers the native Windows print dialog via ShellExecute.
+ * In pywebview (desktop app): sends HTML to Python and falls back to browser print if Python fails.
  * In browser: uses hidden iframe with window.print().
  */
-export function printHtml(html: string): void {
+export async function printHtml(html: string): Promise<void> {
   const pywebview = typeof window !== 'undefined' ? (window as any).pywebview : null
 
   if (pywebview?.api?.print_html_direct) {
-    pywebview.api.print_html_direct(html)
-  } else {
-    // Browser fallback: hidden iframe
-    const iframe = document.createElement('iframe')
+    try {
+      const result = await pywebview.api.print_html_direct(html)
 
-    iframe.style.position = 'fixed'
-    iframe.style.right = '0'
-    iframe.style.bottom = '0'
-    iframe.style.width = '0'
-    iframe.style.height = '0'
-    iframe.style.border = 'none'
-    iframe.srcdoc = html
-
-    document.body.appendChild(iframe)
-
-    iframe.onload = () => {
-      setTimeout(() => {
-        iframe.contentWindow?.print()
-        setTimeout(() => document.body.removeChild(iframe), 1000)
-      }, 300)
+      if (result?.success) return
+      console.error('pywebview print_html_direct failed:', result)
+    } catch (error) {
+      console.error('pywebview print_html_direct threw:', error)
     }
+  }
+
+  // Browser fallback: hidden iframe
+  const iframe = document.createElement('iframe')
+
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = 'none'
+  iframe.srcdoc = html
+
+  document.body.appendChild(iframe)
+
+  iframe.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow?.print()
+      setTimeout(() => document.body.removeChild(iframe), 1000)
+    }, 300)
   }
 }
