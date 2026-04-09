@@ -10,8 +10,12 @@ export async function printHtml(html: string): Promise<void> {
     try {
       const result = await pywebview.api.print_html_direct(html)
 
-      if (result?.success) return
-      console.error('pywebview print_html_direct failed:', result)
+      if (result?.success === false) {
+        console.error('pywebview print_html_direct failed:', result)
+      }
+
+      // When running in desktop app, avoid browser fallback to prevent duplicate prints.
+      return
     } catch (error) {
       console.error('pywebview print_html_direct threw:', error)
     }
