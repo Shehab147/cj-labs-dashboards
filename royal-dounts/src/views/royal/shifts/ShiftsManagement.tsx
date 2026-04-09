@@ -22,7 +22,6 @@ import Tooltip from '@mui/material/Tooltip'
 
 import { shiftApi } from '@/services/api'
 import { useDictionary } from '@/contexts/dictionaryContext'
-import { formatLocalDateTime } from '@/utils/timezone'
 import CustomAvatar from '@core/components/mui/Avatar'
 
 const ShiftsManagement = () => {
@@ -179,8 +178,8 @@ const ShiftsManagement = () => {
                           <Typography variant='body2' color='text.secondary'>0</Typography>
                         )}
                       </TableCell>
-                      <TableCell>{shift.start_time ? formatLocalDateTime(shift.start_time) : '-'}</TableCell>
-                      <TableCell>{shift.end_time ? formatLocalDateTime(shift.end_time) : '-'}</TableCell>
+                      <TableCell>{shift.start_time ? new Date(shift.start_time).toLocaleString() : '-'}</TableCell>
+                      <TableCell>{shift.end_time ? new Date(shift.end_time).toLocaleString() : '-'}</TableCell>
                       <TableCell>
                         {shift.notes ? (
                           <Tooltip title={shift.notes}>

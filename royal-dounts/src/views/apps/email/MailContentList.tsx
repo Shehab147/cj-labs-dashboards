@@ -25,7 +25,6 @@ import CustomAvatar from '@core/components/mui/Avatar'
 
 // Styles Imports
 import styles from './styles.module.css'
-import { formatInCairo } from '@/utils/timezone'
 
 // Data Imports
 import { labelColors } from './SidebarLeft'
@@ -175,11 +174,11 @@ const MailContentList = (props: Props) => {
                         ))}
                       </div>
                       <Typography variant='body2' color='text.disabled' className='whitespace-nowrap'>
-                        {formatInCairo(new Date(email.time), 'en-US', {
+                        {new Intl.DateTimeFormat('en-US', {
                           hour: '2-digit',
                           minute: '2-digit',
                           hour12: true
-                        })}
+                        }).format(new Date(email.time))}
                       </Typography>
                     </div>
                   )}

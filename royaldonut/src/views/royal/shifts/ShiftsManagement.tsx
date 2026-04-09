@@ -23,13 +23,12 @@ import Tab from '@mui/material/Tab'
 import Tooltip from '@mui/material/Tooltip'
 
 import { reportsApi } from '@/services/api'
-import { formatInCairo, formatLocalDateTime } from '@/utils/timezone'
 import CustomAvatar from '@core/components/mui/Avatar'
 
-const today = () => formatInCairo(new Date(), 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+const today = () => new Date().toISOString().split('T')[0]
 const monthStart = () => {
   const d = new Date(); d.setDate(1)
-  return formatInCairo(d, 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return d.toISOString().split('T')[0]
 }
 
 const ShiftsManagement = () => {
@@ -73,8 +72,8 @@ const ShiftsManagement = () => {
         <table>
           <tr><td>الكاشير</td><td class="value">${shift.cashier_name}</td></tr>
           <tr><td>الحالة</td><td class="value">${shift.status === 'open' ? 'نشطة' : 'منتهية'}</td></tr>
-          <tr><td>البداية</td><td class="value">${shift.started_at ? formatLocalDateTime(shift.started_at, 'ar-SA') : '—'}</td></tr>
-          <tr><td>النهاية</td><td class="value">${shift.ended_at ? formatLocalDateTime(shift.ended_at, 'ar-SA') : '—'}</td></tr>
+          <tr><td>البداية</td><td class="value">${shift.started_at ? new Date(shift.started_at).toLocaleString('ar-SA') : '—'}</td></tr>
+          <tr><td>النهاية</td><td class="value">${shift.ended_at ? new Date(shift.ended_at).toLocaleString('ar-SA') : '—'}</td></tr>
           <tr><td>النقدية الافتتاحية</td><td class="value">${parseFloat(shift.opening_cash || 0).toFixed(2)} ج.م</td></tr>
           <tr><td>النقدية الختامية</td><td class="value">${shift.closing_cash ? parseFloat(shift.closing_cash).toFixed(2) + ' ج.م' : '—'}</td></tr>
           <tr><td>النقدية المتوقعة</td><td class="value">${shift.expected_cash ? parseFloat(shift.expected_cash).toFixed(2) + ' ج.م' : '—'}</td></tr>
@@ -227,12 +226,12 @@ const ShiftsManagement = () => {
                           <TableCell align='center'>{shift.orders_count || 0}</TableCell>
                           <TableCell>
                             <Typography variant='caption' color='text.secondary'>
-                              {shift.started_at ? formatLocalDateTime(shift.started_at, 'ar-SA') : '—'}
+                              {shift.started_at ? new Date(shift.started_at).toLocaleString('ar-SA') : '—'}
                             </Typography>
                           </TableCell>
                           <TableCell>
                             <Typography variant='caption' color='text.secondary'>
-                              {shift.ended_at ? formatLocalDateTime(shift.ended_at, 'ar-SA') : '—'}
+                              {shift.ended_at ? new Date(shift.ended_at).toLocaleString('ar-SA') : '—'}
                             </Typography>
                           </TableCell>
                           <TableCell align='right'>
@@ -289,12 +288,12 @@ const ShiftsManagement = () => {
                         </TableCell>
                         <TableCell>
                           <Typography variant='caption' color='text.secondary'>
-                            {shift.started_at ? formatLocalDateTime(shift.started_at, 'ar-SA') : '—'}
+                            {shift.started_at ? new Date(shift.started_at).toLocaleString('ar-SA') : '—'}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Typography variant='caption' color='text.secondary'>
-                            {shift.ended_at ? formatLocalDateTime(shift.ended_at, 'ar-SA') : '—'}
+                            {shift.ended_at ? new Date(shift.ended_at).toLocaleString('ar-SA') : '—'}
                           </Typography>
                         </TableCell>
                         <TableCell>

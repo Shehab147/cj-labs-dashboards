@@ -27,7 +27,6 @@ import Grid from '@mui/material/Grid'
 
 import { kitchenApi, productApi } from '@/services/api'
 import { useDictionary } from '@/contexts/dictionaryContext'
-import { formatLocalDateTime } from '@/utils/timezone'
 
 const KitchenLogs = () => {
   const t = useDictionary()
@@ -167,7 +166,7 @@ const KitchenLogs = () => {
                         <TableCell>
                           <Chip label={`+${log.quantity}`} size='small' color='success' />
                         </TableCell>
-                        <TableCell>{log.created_at ? formatLocalDateTime(log.created_at) : '-'}</TableCell>
+                        <TableCell>{log.created_at ? new Date(log.created_at).toLocaleString() : '-'}</TableCell>
                       </TableRow>
                     ))
                   )}

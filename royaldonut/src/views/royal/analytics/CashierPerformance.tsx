@@ -21,17 +21,16 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 
 import { reportsApi } from '@/services/api'
-import { formatInCairo, formatLocalDateTime } from '@/utils/timezone'
 import CustomAvatar from '@core/components/mui/Avatar'
 
-const today = () => formatInCairo(new Date(), 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+const today = () => new Date().toISOString().split('T')[0]
 
 const monthStart = () => {
   const d = new Date()
 
   d.setDate(1)
 
-  return formatInCairo(d, 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return d.toISOString().split('T')[0]
 }
 
 const CashierPerformance = () => {
@@ -161,8 +160,8 @@ const CashierPerformance = () => {
                             color={shift.cash_difference == null ? 'default' : cashDifference === 0 ? 'success' : 'warning'}
                           />
                         </TableCell>
-                        <TableCell>{shift.started_at ? formatLocalDateTime(shift.started_at, 'ar-SA') : '—'}</TableCell>
-                        <TableCell>{shift.ended_at ? formatLocalDateTime(shift.ended_at, 'ar-SA') : '—'}</TableCell>
+                        <TableCell>{shift.started_at ? new Date(shift.started_at).toLocaleString('ar-SA') : '—'}</TableCell>
+                        <TableCell>{shift.ended_at ? new Date(shift.ended_at).toLocaleString('ar-SA') : '—'}</TableCell>
                       </TableRow>
                     )
                   })

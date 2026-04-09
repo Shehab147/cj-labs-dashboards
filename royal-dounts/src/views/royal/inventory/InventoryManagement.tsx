@@ -27,7 +27,6 @@ import Divider from '@mui/material/Divider'
 
 import { inventoryApi, productApi, kitchenApi } from '@/services/api'
 import { useDictionary } from '@/contexts/dictionaryContext'
-import { formatLocalDate } from '@/utils/timezone'
 
 const InventoryManagement = () => {
   const t = useDictionary()
@@ -159,7 +158,7 @@ const InventoryManagement = () => {
                         </TableCell>
                         <TableCell>{adj.quantity}</TableCell>
                         <TableCell>{adj.reason}</TableCell>
-                        <TableCell>{adj.created_at ? formatLocalDate(adj.created_at) : '-'}</TableCell>
+                        <TableCell>{adj.created_at ? new Date(adj.created_at).toLocaleDateString() : '-'}</TableCell>
                       </TableRow>
                     ))
                   )}
