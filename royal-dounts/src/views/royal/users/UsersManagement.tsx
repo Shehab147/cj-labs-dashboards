@@ -27,6 +27,7 @@ import Divider from '@mui/material/Divider'
 import { userApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
 import { useDictionary } from '@/contexts/dictionaryContext'
+import { formatLocalDate } from '@/utils/timezone'
 
 interface User {
   id: number
@@ -200,7 +201,7 @@ const UsersManagement = () => {
                         <Chip label={roleLabel} size='small' color={roleInfo.color} />
                       </TableCell>
                       <TableCell>
-                        {user.created_at ? new Date(user.created_at).toLocaleDateString() : '-'}
+                        {user.created_at ? formatLocalDate(user.created_at) : '-'}
                       </TableCell>
                       <TableCell align='right'>
                         <IconButton size='small' onClick={() => handleOpenEdit(user)} color='primary'>

@@ -19,16 +19,17 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 
 import { reportsApi } from '@/services/api'
+import { formatInCairo } from '@/utils/timezone'
 import CustomAvatar from '@core/components/mui/Avatar'
 
-const today = () => new Date().toISOString().split('T')[0]
+const today = () => formatInCairo(new Date(), 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
 
 const monthStart = () => {
   const d = new Date()
 
   d.setDate(1)
 
-  return d.toISOString().split('T')[0]
+  return formatInCairo(d, 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 const SalesAnalytics = () => {

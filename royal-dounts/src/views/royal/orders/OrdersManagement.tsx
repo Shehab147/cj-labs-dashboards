@@ -30,6 +30,7 @@ import Grid from '@mui/material/Grid'
 import { orderApi, paymentApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
 import { useDictionary } from '@/contexts/dictionaryContext'
+import { formatLocalDateTime } from '@/utils/timezone'
 
 const STATUS_COLORS: Record<string, 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info'> = {
   pending: 'default',
@@ -227,7 +228,7 @@ const OrdersManagement = () => {
                       </TableCell>
                       <TableCell>{parseFloat(order.total || order.total_price || 0).toFixed(2)}</TableCell>
                       <TableCell>{order.customer_name || '-'}</TableCell>
-                      <TableCell>{order.created_at ? new Date(order.created_at).toLocaleString() : '-'}</TableCell>
+                      <TableCell>{order.created_at ? formatLocalDateTime(order.created_at) : '-'}</TableCell>
                       <TableCell align='right' onClick={e => e.stopPropagation()}>
                         {order.status !== 'cancelled' && order.status !== 'done' && (
                           <>

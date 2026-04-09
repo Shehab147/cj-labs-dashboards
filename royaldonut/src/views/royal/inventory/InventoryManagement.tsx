@@ -32,6 +32,7 @@ import Tooltip from '@mui/material/Tooltip'
 
 import { stockApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
+import { formatInCairo, formatLocalDateTime } from '@/utils/timezone'
 
 const TRANSACTION_TYPES = [
   { value: 'purchase', label: 'شراء / توريد', color: 'success' as const },
@@ -171,7 +172,7 @@ const InventoryManagement = () => {
       .low{color:red}@media print{button{display:none}}</style></head>
       <body>
         <h3>🍩 رويال دونتس — تقرير المخزون التفصيلي</h3>
-        <p style="text-align:center">${new Date().toLocaleString('ar-SA')}</p>
+        <p style="text-align:center">${formatInCairo(new Date(), 'ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true })}</p>
         <table>
           <tr><th>#</th><th>الصنف</th><th>الوحدة</th><th>الكمية الحالية</th><th>الحد الأدنى</th><th>التكلفة / وحدة</th><th>الحالة</th></tr>
           ${stockItems.map((item, i) => `
@@ -367,7 +368,7 @@ const InventoryManagement = () => {
                         </TableCell>
                         <TableCell>
                           <Typography variant='caption' color='text.secondary'>
-                            {tx.created_at ? new Date(tx.created_at).toLocaleString('ar-SA') : '—'}
+                            {tx.created_at ? formatLocalDateTime(tx.created_at, 'ar-SA') : '—'}
                           </Typography>
                         </TableCell>
                       </TableRow>

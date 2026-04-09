@@ -2,13 +2,15 @@
  * Timezone Utility for X-Station
  * 
  * The server stores all times in UTC+0.
- * This utility converts server times to the user's local browser timezone
+ * This utility converts server times to Cairo timezone for display
  * and vice versa for sending data back to the server.
  */
 
+export const APP_TIMEZONE = 'Africa/Cairo'
+
 /**
  * Parse a MySQL datetime string (YYYY-MM-DD HH:MM:SS) from server (UTC)
- * and return a Date object in local timezone
+ * and return a Date object
  */
 export const parseServerDateTime = (dateStr: string | null | undefined): Date | null => {
   if (!dateStr) return null
@@ -30,7 +32,7 @@ export const parseServerDateTimeMs = (dateStr: string | null | undefined): numbe
 }
 
 /**
- * Format a Date object or server datetime string to local time string
+ * Format a Date object or server datetime string to Cairo time string
  */
 export const formatLocalTime = (
   dateInput: Date | string | null | undefined,
@@ -47,14 +49,15 @@ export const formatLocalTime = (
     minute: '2-digit',
     second: '2-digit',
     hour12: true,
-    ...options
+    ...options,
+    timeZone: APP_TIMEZONE
   }
   
   return date.toLocaleTimeString(locale, defaultOptions)
 }
 
 /**
- * Format a Date object or server datetime string to local date string
+ * Format a Date object or server datetime string to Cairo date string
  */
 export const formatLocalDate = (
   dateInput: Date | string | null | undefined,
@@ -70,14 +73,15 @@ export const formatLocalDate = (
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    ...options
+    ...options,
+    timeZone: APP_TIMEZONE
   }
   
   return date.toLocaleDateString(locale, defaultOptions)
 }
 
 /**
- * Format a Date object or server datetime string to local datetime string
+ * Format a Date object or server datetime string to Cairo datetime string
  */
 export const formatLocalDateTime = (
   dateInput: Date | string | null | undefined,
@@ -96,7 +100,8 @@ export const formatLocalDateTime = (
     hour: '2-digit',
     minute: '2-digit',
     hour12: true,
-    ...options
+    ...options,
+    timeZone: APP_TIMEZONE
   }
   
   return date.toLocaleString(locale, defaultOptions)
@@ -233,4 +238,35 @@ export const dateFormats = {
   shortTime: { hour: '2-digit', minute: '2-digit' } as Intl.DateTimeFormatOptions,
   longTime: { hour: '2-digit', minute: '2-digit', second: '2-digit' } as Intl.DateTimeFormatOptions,
   shortDateTime: { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' } as Intl.DateTimeFormatOptions,
+}
+
+export const formatInCairo = (
+  dateInput: Date | string | null | undefined,
+  locale?: string,
+  options?: Intl.DateTimeFormatOptions
+): string => {
+  if (!dateInput) return ''
+
+  const date = typeof dateInput === 'string' ? parseServerDateTime(dateInput) : dateInput
+  if (!date) return ''
+
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: APP_TIMEZONE }).format(date)
+}
+
+export const getCairoDateParts = (
+  dateInput: Date | string
+): { day: number; month: number; year: number } => {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: APP_TIMEZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).formatToParts(date)
+
+  const day = Number(parts.find(part => part.type === 'day')?.value ?? 0)
+  const month = Number(parts.find(part => part.type === 'month')?.value ?? 0)
+  const year = Number(parts.find(part => part.type === 'year')?.value ?? 0)
+
+  return { day, month, year }
 }

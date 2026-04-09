@@ -21,6 +21,7 @@ import DialogActions from '@mui/material/DialogActions'
 import TextField from '@mui/material/TextField'
 
 import { orderApi, kitchenShiftApi, stockApi } from '@/services/api'
+import { formatLocalTime } from '@/utils/timezone'
 
 const KitchenOrders = () => {
   const [orders, setOrders] = useState<any[]>([])
@@ -172,7 +173,7 @@ const KitchenOrders = () => {
             <>
               <Chip label='وردية نشطة' color='success' size='small' />
               <Typography variant='caption' color='text.secondary'>
-                {currentShift?.started_at ? `بدأت: ${new Date(currentShift.started_at).toLocaleTimeString('ar-SA')}` : ''}
+                {currentShift?.started_at ? `بدأت: ${formatLocalTime(currentShift.started_at, 'ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true })}` : ''}
               </Typography>
               <Button variant='outlined' color='error' size='small' onClick={handleOpenEndShift}>
                 إنهاء الوردية
@@ -246,7 +247,7 @@ const KitchenOrders = () => {
                           </Box>
                         )}
                         <Typography variant='caption' color='text.secondary' className='mt-2 block'>
-                          {order.created_at ? new Date(order.created_at).toLocaleTimeString('ar-SA') : ''}
+                          {order.created_at ? formatLocalTime(order.created_at, 'ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
                         </Typography>
                       </CardContent>
                       <CardActions>
@@ -308,7 +309,7 @@ const KitchenOrders = () => {
                           </Box>
                         )}
                         <Typography variant='caption' color='text.secondary' className='mt-2 block'>
-                          {order.created_at ? new Date(order.created_at).toLocaleTimeString('ar-SA') : ''}
+                          {order.created_at ? formatLocalTime(order.created_at, 'ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true }) : ''}
                         </Typography>
                       </CardContent>
                       <CardActions>

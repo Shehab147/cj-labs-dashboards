@@ -1,11 +1,10 @@
-const isToday = (date: Date | string) => {
-  const today = new Date()
+import { formatInCairo, getCairoDateParts } from '@/utils/timezone'
 
-  return (
-    new Date(date).getDate() === today.getDate() &&
-    new Date(date).getMonth() === today.getMonth() &&
-    new Date(date).getFullYear() === today.getFullYear()
-  )
+const isToday = (date: Date | string) => {
+  const today = getCairoDateParts(new Date())
+  const candidate = getCairoDateParts(date)
+
+  return candidate.day === today.day && candidate.month === today.month && candidate.year === today.year
 }
 
 export const formatDateToMonthShort = (value: Date | string, toTimeForCurrentDay = true) => {
@@ -16,5 +15,5 @@ export const formatDateToMonthShort = (value: Date | string, toTimeForCurrentDay
     formatting = { hour: 'numeric', minute: 'numeric' }
   }
 
-  return new Intl.DateTimeFormat('en-US', formatting).format(new Date(value))
+  return formatInCairo(new Date(value), 'en-US', formatting)
 }

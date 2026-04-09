@@ -19,6 +19,7 @@ import CustomAvatar from '@core/components/mui/Avatar'
 
 // Util Imports
 import { getInitials } from '@/utils/getInitials'
+import { formatInCairo } from '@/utils/timezone'
 
 type MsgGroupType = {
   senderId: number
@@ -192,11 +193,11 @@ const ChatLog = ({ chatStore, isBelowLgScreen, isBelowMdScreen, isBelowSmScreen 
                           )}
                           {index === activeUserChat.chat.length - 1 ? (
                             <Typography variant='caption'>
-                              {new Date().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}
+                              {formatInCairo(new Date(), 'en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}
                             </Typography>
                           ) : msg.time ? (
                             <Typography variant='caption'>
-                              {new Date(msg.time).toLocaleString('en-US', {
+                              {formatInCairo(new Date(msg.time), 'en-US', {
                                 hour: 'numeric',
                                 minute: 'numeric',
                                 hour12: true
@@ -206,11 +207,11 @@ const ChatLog = ({ chatStore, isBelowLgScreen, isBelowMdScreen, isBelowSmScreen 
                         </div>
                       ) : index === activeUserChat.chat.length - 1 ? (
                         <Typography key={index} variant='caption'>
-                          {new Date().toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}
+                          {formatInCairo(new Date(), 'en-US', { hour: 'numeric', minute: 'numeric', hour12: true })}
                         </Typography>
                       ) : msg.time ? (
                         <Typography key={index} variant='caption'>
-                          {new Date(msg.time).toLocaleString('en-US', {
+                          {formatInCairo(new Date(msg.time), 'en-US', {
                             hour: 'numeric',
                             minute: 'numeric',
                             hour12: true

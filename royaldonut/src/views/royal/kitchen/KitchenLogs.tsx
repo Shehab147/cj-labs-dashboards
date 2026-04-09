@@ -28,6 +28,7 @@ import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
 
 import { stockApi } from '@/services/api'
+import { formatInCairo, formatLocalDate } from '@/utils/timezone'
 
 const TRANSACTION_TYPES = [
   { value: 'purchase', label: 'شراء / توريد', color: 'success' as const },
@@ -119,7 +120,7 @@ const KitchenLogs = () => {
       @media print{button{display:none}}</style></head>
       <body>
         <h3>🍩 رويال دونتس — تقرير المخزون</h3>
-        <p style="text-align:center">${new Date().toLocaleString('ar-SA')}</p>
+        <p style="text-align:center">${formatInCairo(new Date(), 'ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true })}</p>
         <table>
           <tr><th>الصنف</th><th>الوحدة</th><th>الكمية الحالية</th><th>الحد الأدنى</th><th>الحالة</th></tr>
           ${stockItems.map(item => `
@@ -286,7 +287,7 @@ const KitchenLogs = () => {
                           </TableCell>
                           <TableCell>
                             <Typography variant='caption' color='text.secondary'>
-                              {tx.created_at ? new Date(tx.created_at).toLocaleDateString('ar-SA') : '—'}
+                              {tx.created_at ? formatLocalDate(tx.created_at, 'ar-SA') : '—'}
                             </Typography>
                           </TableCell>
                         </TableRow>

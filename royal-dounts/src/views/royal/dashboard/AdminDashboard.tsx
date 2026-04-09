@@ -22,6 +22,7 @@ import TableRow from '@mui/material/TableRow'
 import { analyticsApi, orderApi, kitchenApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
 import { useDictionary } from '@/contexts/dictionaryContext'
+import { formatInCairo, formatLocalTime } from '@/utils/timezone'
 import CustomAvatar from '@core/components/mui/Avatar'
 
 const AdminDashboard = () => {
@@ -52,7 +53,7 @@ const AdminDashboard = () => {
 
         // Admin gets the full recent orders list
         if (isAdmin) {
-          const orderParams: any = { start_date: new Date().toISOString().split('T')[0] }
+          const orderParams: any = { start_date: formatInCairo(new Date(), 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }) }
           const ordersRes = await orderApi.getAll(orderParams)
           if (ordersRes.status === 'success') {
             setRecentOrders(Array.isArray(ordersRes.data) ? ordersRes.data.slice(0, 10) : ordersRes.data?.orders?.slice(0, 10) || [])
@@ -105,7 +106,7 @@ const AdminDashboard = () => {
                 {t.dashboard.welcomeBack} {admin?.name || 'User'}! 🍩
               </Typography>
               <Typography variant='body2' color='text.secondary' component='div' sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {new Date().toLocaleDateString(undefined, {
+                {formatInCairo(new Date(), undefined, {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
@@ -255,7 +256,7 @@ const AdminDashboard = () => {
                           </TableCell>
                           <TableCell>
                             <Typography variant='caption' color='text.secondary'>
-                              {order.created_at ? new Date(order.created_at).toLocaleTimeString() : '-'}
+                              {order.created_at ? formatLocalTime(order.created_at, undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : '-'}
                             </Typography>
                           </TableCell>
                         </>
@@ -319,7 +320,7 @@ const AdminDashboard = () => {
                       <div>
                         <Typography variant='subtitle2'>{shift.cashier_name || shift.user_name || `User #${shift.user_id || shift.id}`}</Typography>
                         <Typography variant='caption' color='text.secondary'>
-                          {t.dashboard.since} {shift.start_time ? new Date(shift.start_time).toLocaleTimeString() : 'N/A'}
+                          {t.dashboard.since} {shift.start_time ? formatLocalTime(shift.start_time, undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : 'N/A'}
                         </Typography>
                       </div>
                     </Box>

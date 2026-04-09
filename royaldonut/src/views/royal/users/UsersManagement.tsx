@@ -27,6 +27,7 @@ import Tooltip from '@mui/material/Tooltip'
 
 import { userApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
+import { formatLocalDate } from '@/utils/timezone'
 
 interface User {
   id: number
@@ -217,7 +218,7 @@ const UsersManagement = () => {
                     </TableCell>
                     <TableCell>
                       <Typography variant='caption' color='text.secondary'>
-                        {user.created_at ? new Date(user.created_at).toLocaleDateString('ar-SA') : '—'}
+                        {user.created_at ? formatLocalDate(user.created_at, 'ar-SA') : '—'}
                       </Typography>
                     </TableCell>
                     <TableCell align='right'>

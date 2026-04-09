@@ -25,15 +25,16 @@ import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 
 import { orderApi } from '@/services/api'
+import { formatInCairo, formatLocalDateTime } from '@/utils/timezone'
 
-const today = () => new Date().toISOString().split('T')[0]
+const today = () => formatInCairo(new Date(), 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
 
 const monthStart = () => {
   const d = new Date()
 
   d.setDate(1)
 
-  return d.toISOString().split('T')[0]
+  return formatInCairo(d, 'en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 const RefundsManagement = () => {
@@ -157,7 +158,7 @@ const RefundsManagement = () => {
                         color={order.payment_status === 'refunded' ? 'error' : 'warning'}
                       />
                     </TableCell>
-                    <TableCell>{order.created_at ? new Date(order.created_at).toLocaleString('ar-SA') : '—'}</TableCell>
+                    <TableCell>{order.created_at ? formatLocalDateTime(order.created_at, 'ar-SA') : '—'}</TableCell>
                   </TableRow>
                 ))
               )}

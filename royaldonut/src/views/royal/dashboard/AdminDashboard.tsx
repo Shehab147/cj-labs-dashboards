@@ -20,6 +20,7 @@ import TableRow from '@mui/material/TableRow'
 
 import { reportsApi, orderApi } from '@/services/api'
 import { useAuth } from '@/contexts/authContext'
+import { formatInCairo, formatLocalTime } from '@/utils/timezone'
 import CustomAvatar from '@core/components/mui/Avatar'
 
 const STATUS_COLORS: Record<string, 'default' | 'warning' | 'success' | 'error' | 'info'> = {
@@ -107,7 +108,7 @@ const AdminDashboard = () => {
                 مرحباً بعودتك، {admin?.name || 'مستخدم'}! 🍩
               </Typography>
               <Typography variant='body2' color='text.secondary' component='div' sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {new Date().toLocaleDateString('ar-SA', {
+                {formatInCairo(new Date(), 'ar-SA', {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
@@ -270,7 +271,7 @@ const AdminDashboard = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant='caption' color='text.secondary'>
-                          {order.created_at ? new Date(order.created_at).toLocaleTimeString('ar-SA') : '—'}
+                          {order.created_at ? formatLocalTime(order.created_at, 'ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'}
                         </Typography>
                       </TableCell>
                     </TableRow>

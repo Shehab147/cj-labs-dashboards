@@ -14,6 +14,7 @@ import type { Email } from '@/types/apps/emailTypes'
 // Component Imports
 import CustomAvatar from '@core/components/mui/Avatar'
 import OptionMenu from '@core/components/option-menu'
+import { formatInCairo } from '@/utils/timezone'
 
 // Styles Imports
 import styles from './styles.module.css'
@@ -22,14 +23,14 @@ const CardHeaderAction = ({ data, isReplies }: { data: Email; isReplies: boolean
   return (
     <div className='flex items-center gap-4'>
       <Typography color='text.disabled'>
-        {new Intl.DateTimeFormat('en-US', {
+        {formatInCairo(new Date(data.time), 'en-US', {
           year: 'numeric',
           month: 'short',
           day: '2-digit',
           hour: '2-digit',
           minute: '2-digit',
           hour12: true
-        }).format(new Date(data.time))}
+        })}
       </Typography>
       <div className='flex items-center gap-1'>
         {data.attachments.length ? (
