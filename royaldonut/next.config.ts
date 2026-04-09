@@ -2,9 +2,6 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   basePath: process.env.BASEPATH,
-  eslint: {
-    ignoreDuringBuilds: true
-  },
   redirects: async () => {
     return [
       {
