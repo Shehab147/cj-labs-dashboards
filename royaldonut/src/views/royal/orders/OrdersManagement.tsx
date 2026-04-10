@@ -80,6 +80,11 @@ const OrdersManagement = () => {
   const [payStatus, setPayStatus] = useState<string>('paid')
   const [payMethod, setPayMethod] = useState<string>('cash')
 
+  // Cancel confirmation dialog
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
+  const [cancellingOrder, setCancellingOrder] = useState<any>(null)
+  const [isCancelling, setIsCancelling] = useState(false)
+
   const fetchOrders = useCallback(async () => {
     try {
       setIsLoading(true)
@@ -131,18 +136,28 @@ const OrdersManagement = () => {
     }
   }
 
-  const handleCancel = async (orderId: number) => {
-    if (!confirm(`إلغاء الطلب #${orderId}؟`)) return
+  const handleCancelClick = (order: any) => {
+    setCancellingOrder(order)
+    setCancelDialogOpen(true)
+  }
+
+  const handleConfirmCancel = async () => {
+    if (!cancellingOrder) return
+    setIsCancelling(true)
     try {
-      const res = await orderApi.cancel(orderId)
+      const res = await orderApi.cancel(cancellingOrder.id)
       if (res.status === 'success') {
-        setSnackbar({ open: true, message: `تم إلغاء الطلب #${orderId}`, severity: 'success' })
+        setSnackbar({ open: true, message: `تم إلغاء الطلب ${cancellingOrder.order_number || `#${cancellingOrder.id}`}`, severity: 'success' })
         fetchOrders()
       } else {
         setSnackbar({ open: true, message: res.message || 'فشل الإلغاء', severity: 'error' })
       }
     } catch {
       setSnackbar({ open: true, message: 'فشل الإلغاء', severity: 'error' })
+    } finally {
+      setIsCancelling(false)
+      setCancelDialogOpen(false)
+      setCancellingOrder(null)
     }
   }
 
@@ -353,7 +368,7 @@ const OrdersManagement = () => {
                         {/* Cancel */}
                         {order.order_status !== 'cancelled' && order.order_status !== 'picked_up' && (
                           <Tooltip title='إلغاء الطلب'>
-                            <IconButton size='small' color='error' onClick={() => handleCancel(order.id)}>
+                            <IconButton size='small' color='error' onClick={() => handleCancelClick(order)}>
                               <i className='tabler-x text-lg' />
                             </IconButton>
                           </Tooltip>
@@ -461,6 +476,42 @@ const OrdersManagement = () => {
         <DialogActions>
           <Button onClick={() => setPayDialogOpen(false)}>إلغاء</Button>
           <Button variant='contained' onClick={handlePaymentUpdate}>حفظ</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={cancelDialogOpen} onClose={() => !isCancelling && setCancelDialogOpen(false)} maxWidth='xs' fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <i className='tabler-alert-triangle text-2xl' style={{ color: 'var(--mui-palette-error-main)' }} />
+          تأكيد إلغاء الطلب
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant='body1' gutterBottom>
+            هل أنت متأكد من إلغاء الطلب <strong>{cancellingOrder?.order_number || `#${cancellingOrder?.id}`}</strong>؟
+          </Typography>
+          {cancellingOrder?.customer_name && (
+            <Typography variant='body2' color='text.secondary'>
+              العميل: {cancellingOrder.customer_name}
+            </Typography>
+          )}
+          <Typography variant='body2' color='text.secondary'>
+            الإجمالي: {parseFloat(cancellingOrder?.total || 0).toFixed(2)} ج.م
+          </Typography>
+          <Alert severity='warning' sx={{ mt: 2 }}>
+            هذا الإجراء لا يمكن التراجع عنه وسيتم استرداد المبلغ تلقائياً.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelDialogOpen(false)} disabled={isCancelling}>تراجع</Button>
+          <Button
+            variant='contained'
+            color='error'
+            onClick={handleConfirmCancel}
+            disabled={isCancelling}
+            startIcon={isCancelling ? <CircularProgress size={18} color='inherit' /> : <i className='tabler-x' />}
+          >
+            {isCancelling ? 'جاري الإلغاء...' : 'إلغاء الطلب'}
+          </Button>
         </DialogActions>
       </Dialog>
 
