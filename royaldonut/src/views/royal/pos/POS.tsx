@@ -43,6 +43,12 @@ const PAYMENT_METHODS = [
   { value: 'other', label: 'أخرى' },
 ]
 
+const ORDER_TYPES = [
+  { value: 'onsite', label: 'محلي - Dine In', icon: 'tabler-building-store' },
+  { value: 'takeaway', label: 'سفري - Takeaway', icon: 'tabler-package' },
+  { value: 'delivery', label: 'توصيل - Delivery', icon: 'tabler-truck-delivery' },
+]
+
 const POS = () => {
   const { admin } = useAuth()
   const [menuItems, setMenuItems] = useState<any[]>([])
@@ -59,6 +65,9 @@ const POS = () => {
   const [discountAmount, setDiscountAmount] = useState('0')
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'online' | 'other'>('cash')
   const [orderNotes, setOrderNotes] = useState('')
+  const [orderType, setOrderType] = useState<'onsite' | 'takeaway' | 'delivery'>('onsite')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [deliveryCost, setDeliveryCost] = useState('0')
 
   // Shift dialog
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false)
@@ -133,7 +142,8 @@ const POS = () => {
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const discount = parseFloat(discountAmount) || 0
-  const total = Math.max(0, subtotal - discount)
+  const deliveryCostNum = orderType === 'delivery' ? (parseFloat(deliveryCost) || 0) : 0
+  const total = Math.max(0, subtotal - discount + deliveryCostNum)
 
   const handleStartShift = async () => {
     if (!openingCash) return
@@ -186,7 +196,10 @@ const POS = () => {
         discount_amount: discount || undefined,
         payment_method: paymentMethod,
         payment_status: 'pending',
-        notes: orderNotes || undefined
+        notes: orderNotes || undefined,
+        type: orderType,
+        address: orderType === 'delivery' ? deliveryAddress : undefined,
+        delivery_cost: orderType === 'delivery' ? deliveryCostNum : undefined
       })
 
       if (res.status === 'success') {
@@ -198,6 +211,9 @@ const POS = () => {
         setCustomerPhone('')
         setDiscountAmount('0')
         setOrderNotes('')
+        setOrderType('onsite')
+        setDeliveryAddress('')
+        setDeliveryCost('0')
       } else {
         setSnackbar({ open: true, message: res.message || 'فشل إنشاء الطلب', severity: 'error' })
       }
@@ -250,8 +266,10 @@ const POS = () => {
         <p class="center">${lastOrder.order_number || `#${lastOrder.id}`}</p>
         <p class="center">${new Date().toLocaleString('ar-SA')}</p>
         <hr/>
+        <p>نوع الطلب: ${lastOrder.type === 'onsite' ? 'محلي - Dine In' : lastOrder.type === 'takeaway' ? 'سفري - Takeaway' : 'توصيل - Delivery'}</p>
         ${lastOrder.customer_name ? `<p>العميل: ${lastOrder.customer_name}</p>` : ''}
         ${lastOrder.customer_phone ? `<p>الهاتف: ${lastOrder.customer_phone}</p>` : ''}
+        ${lastOrder.type === 'delivery' && lastOrder.address ? `<p>العنوان: ${lastOrder.address}</p>` : ''}
         <table>
           <tr><th>الصنف</th><th>ك</th><th>السعر</th></tr>
           ${items.map((i: any) => `<tr><td>${i.item_name || i.name || '-'}</td><td>${i.quantity || i.qty || 0}</td><td>${parseFloat(i.line_total || i.total_price || i.total || 0).toFixed(2)}</td></tr>`).join('')}
@@ -259,6 +277,7 @@ const POS = () => {
         <hr/>
         <p>المجموع: ${parseFloat(lastOrder.subtotal || 0).toFixed(2)}</p>
         ${parseFloat(lastOrder.discount_amount || 0) > 0 ? `<p>الخصم: ${parseFloat(lastOrder.discount_amount).toFixed(2)}</p>` : ''}
+        ${parseFloat(lastOrder.delivery_cost || 0) > 0 ? `<p>توصيل: ${parseFloat(lastOrder.delivery_cost).toFixed(2)}</p>` : ''}
         <p class="total">الإجمالي: ${parseFloat(lastOrder.total || 0).toFixed(2)} ج.م</p>
         <p>طريقة الدفع: ${lastOrder.payment_method === 'cash' ? 'نقدي' : lastOrder.payment_method === 'card' ? 'بطاقة' : lastOrder.payment_method}</p>
         <hr/>
@@ -392,6 +411,45 @@ const POS = () => {
             />
             <Divider />
             <CardContent>
+              {/* Order Type Selection */}
+              <Box className='flex gap-1 mb-3'>
+                {ORDER_TYPES.map(t => (
+                  <Button
+                    key={t.value}
+                    variant={orderType === t.value ? 'contained' : 'outlined'}
+                    size='small'
+                    onClick={() => setOrderType(t.value as any)}
+                    startIcon={<i className={t.icon} />}
+                    sx={{ flex: 1, fontSize: '0.75rem', py: 1 }}
+                  >
+                    {t.label}
+                  </Button>
+                ))}
+              </Box>
+
+              {/* Delivery fields */}
+              {orderType === 'delivery' && (
+                <>
+                  <TextField
+                    label='عنوان التوصيل - Delivery Address'
+                    value={deliveryAddress}
+                    onChange={e => setDeliveryAddress(e.target.value)}
+                    fullWidth size='small' className='mb-3'
+                    required
+                    multiline rows={2}
+                    placeholder='مثال: شارع النيل، عمارة 5، الدور 3'
+                  />
+                  <TextField
+                    label='تكلفة التوصيل - Delivery Cost (ج.م)'
+                    type='number'
+                    value={deliveryCost}
+                    onChange={e => setDeliveryCost(e.target.value)}
+                    fullWidth size='small' className='mb-3'
+                    inputProps={{ step: '0.01', min: '0' }}
+                  />
+                </>
+              )}
+
               {/* Customer Info */}
               <TextField
                 label='اسم العميل (اختياري)'
@@ -479,6 +537,12 @@ const POS = () => {
                   <Typography variant='body2' color='error'>- {discount.toFixed(2)}</Typography>
                 </Box>
               )}
+              {deliveryCostNum > 0 && (
+                <Box className='flex justify-between mb-1'>
+                  <Typography variant='body2' color='info.main'>توصيل - Delivery</Typography>
+                  <Typography variant='body2' color='info.main'>+ {deliveryCostNum.toFixed(2)}</Typography>
+                </Box>
+              )}
               <Box className='flex justify-between mb-4'>
                 <Typography variant='h6'>الإجمالي</Typography>
                 <Typography variant='h6' color='primary'>{total.toFixed(2)} ج.م</Typography>
@@ -563,6 +627,14 @@ const POS = () => {
           <Typography>
             الإجمالي: <strong>{parseFloat(lastOrder?.total || 0).toFixed(2)} ج.م</strong>
           </Typography>
+          <Typography variant='body2' color='text.secondary'>
+            نوع الطلب: {ORDER_TYPES.find(t => t.value === lastOrder?.type)?.label || lastOrder?.type || 'محلي - Dine In'}
+          </Typography>
+          {lastOrder?.type === 'delivery' && lastOrder?.address && (
+            <Typography variant='body2' color='text.secondary'>
+              العنوان: {lastOrder.address}
+            </Typography>
+          )}
           <Typography variant='body2' color='text.secondary'>
             طريقة الدفع: {PAYMENT_METHODS.find(m => m.value === lastOrder?.payment_method)?.label || lastOrder?.payment_method}
           </Typography>

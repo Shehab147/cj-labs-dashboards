@@ -365,7 +365,7 @@ const OrdersManagement = () => {
                     <TableRow key={`detail-${order.id}`}>
                       <TableCell colSpan={8} style={{ paddingBottom: 0, paddingTop: 0, border: expandedOrder === order.id ? undefined : 'none' }}>
                         <Collapse in={expandedOrder === order.id} timeout='auto' unmountOnExit>
-                          <Box className='p-4 bg-gray-50 dark:bg-gray-900 rounded-b'>
+                          <Box className='p-4 rounded-b' sx={{ bgcolor: 'action.hover' }}>
                             {orderDetail && (
                               <Grid container spacing={2}>
                                 <Grid size={{ xs: 12, md: 6 }}>

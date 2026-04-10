@@ -146,7 +146,17 @@ export const orderApi = {
     payment_method: 'cash' | 'card' | 'online' | 'other'
     payment_status?: 'pending' | 'paid'
     notes?: string
+    type?: 'takeaway' | 'onsite' | 'delivery'
+    address?: string
+    delivery_cost?: number
   }) => apiCall('place_order', data),
+
+  updateType: (data: {
+    order_id: number
+    type: 'takeaway' | 'onsite' | 'delivery'
+    address?: string
+    delivery_cost?: number
+  }) => apiCall('update_order_type', data),
 
   // Cashier: their open shift orders. Admin: filter by shift_id or status
   getOrders: (params?: { shift_id?: string; status?: string }) =>
