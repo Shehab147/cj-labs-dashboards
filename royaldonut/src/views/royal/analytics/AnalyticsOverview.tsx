@@ -16,6 +16,7 @@ import TableContainer from '@mui/material/TableContainer'
 import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Chip from '@mui/material/Chip'
+import Box from '@mui/material/Box'
 
 import { reportsApi } from '@/services/api'
 import CustomAvatar from '@core/components/mui/Avatar'
@@ -52,6 +53,8 @@ const AnalyticsOverview = () => {
   const report = dashboard?.today_report || {}
   const lowStockItems = dashboard?.low_stock_items || []
   const orderCounts = dashboard?.order_counts || []
+  const openCashierShifts = dashboard?.open_cashier_shifts || []
+  const openKitchenShifts = dashboard?.open_kitchen_shifts || []
 
   return (
     <Grid container spacing={6}>
@@ -144,7 +147,7 @@ const AnalyticsOverview = () => {
                     <TableRow key={item.id || item.menu_item_id || index}>
                       <TableCell>{index + 1}</TableCell>
                       <TableCell>{item.name || item.item_name || '-'}</TableCell>
-                      <TableCell align='center'>{item.total_qty || item.total_quantity_sold || item.qty || 0}</TableCell>
+                      <TableCell align='center'>{item.total_qty_sold || item.total_qty || item.qty || 0}</TableCell>
                       <TableCell align='right'>{parseFloat(item.total_revenue || item.revenue || 0).toFixed(2)}</TableCell>
                     </TableRow>
                   ))
@@ -154,6 +157,53 @@ const AnalyticsOverview = () => {
           </TableContainer>
         </Card>
       </Grid>
+
+      {openCashierShifts.length > 0 && (
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card>
+            <CardHeader title='ورديات الكاشير المفتوحة' />
+            <Divider />
+            <CardContent className='flex flex-col gap-3'>
+              {openCashierShifts.map((shift: any) => (
+                <div key={shift.id} className='flex items-center justify-between'>
+                  <Box>
+                    <Typography variant='subtitle2'>{shift.cashier_name}</Typography>
+                    <Typography variant='caption' color='text.secondary'>
+                      منذ {new Date(shift.started_at).toLocaleString('ar-SA')}
+                    </Typography>
+                  </Box>
+                  <Box className='flex items-center gap-2'>
+                    <Typography variant='body2'>{parseFloat(shift.opening_cash || 0).toFixed(2)} ج.م</Typography>
+                    <Chip label='نشطة' size='small' color='success' />
+                  </Box>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+
+      {openKitchenShifts.length > 0 && (
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card>
+            <CardHeader title='ورديات المطبخ المفتوحة' />
+            <Divider />
+            <CardContent className='flex flex-col gap-3'>
+              {openKitchenShifts.map((shift: any) => (
+                <div key={shift.id} className='flex items-center justify-between'>
+                  <Box>
+                    <Typography variant='subtitle2'>{shift.full_name}</Typography>
+                    <Typography variant='caption' color='text.secondary'>
+                      منذ {new Date(shift.started_at).toLocaleString('ar-SA')}
+                    </Typography>
+                  </Box>
+                  <Chip label='نشطة' size='small' color='success' />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
     </Grid>
   )
 }

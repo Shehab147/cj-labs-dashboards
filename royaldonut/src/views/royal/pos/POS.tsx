@@ -179,11 +179,15 @@ const POS = () => {
     }
   }
 
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   const handlePlaceOrder = async () => {
     if (cart.length === 0) {
       setSnackbar({ open: true, message: 'السلة فارغة', severity: 'error' })
       return
     }
+    if (isSubmitting) return
+    setIsSubmitting(true)
     try {
       const res = await orderApi.place({
         items: cart.map(item => ({
@@ -219,6 +223,8 @@ const POS = () => {
       }
     } catch {
       setSnackbar({ open: true, message: 'فشل إنشاء الطلب', severity: 'error' })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -559,11 +565,11 @@ const POS = () => {
               <Button
                 variant='contained'
                 fullWidth size='large'
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || isSubmitting}
                 onClick={handlePlaceOrder}
-                startIcon={<i className='tabler-send' />}
+                startIcon={isSubmitting ? <CircularProgress size={20} color='inherit' /> : <i className='tabler-send' />}
               >
-                إرسال الطلب
+                {isSubmitting ? 'جاري الإرسال...' : 'إرسال الطلب'}
               </Button>
             </CardContent>
           </Card>
