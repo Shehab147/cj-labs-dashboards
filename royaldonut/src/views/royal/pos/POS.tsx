@@ -247,6 +247,15 @@ const POS = () => {
     setPaymentDialogOpen(false)
   }
 
+  const escapeReceiptText = (value: unknown) =>
+    String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/\n/g, '<br/>')
+
   // Print receipt
   const handlePrintReceipt = () => {
     if (!lastOrder) return
@@ -269,16 +278,26 @@ const POS = () => {
       </head>
       <body>
         <h2>🍩 رويال دونتس</h2>
-        <p class="center">${lastOrder.order_number || `#${lastOrder.id}`}</p>
+        <p class="center">${escapeReceiptText(lastOrder.order_number || `#${lastOrder.id}`)}</p>
         <p class="center">${new Date().toLocaleString('ar-SA')}</p>
         <hr/>
         <p>نوع الطلب: ${lastOrder.type === 'onsite' ? 'محلي - Dine In' : lastOrder.type === 'takeaway' ? 'سفري - Takeaway' : 'توصيل - Delivery'}</p>
-        ${lastOrder.customer_name ? `<p>العميل: ${lastOrder.customer_name}</p>` : ''}
-        ${lastOrder.customer_phone ? `<p>الهاتف: ${lastOrder.customer_phone}</p>` : ''}
-        ${lastOrder.type === 'delivery' && lastOrder.address ? `<p>العنوان: ${lastOrder.address}</p>` : ''}
+        ${lastOrder.customer_name ? `<p>العميل: ${escapeReceiptText(lastOrder.customer_name)}</p>` : ''}
+        ${lastOrder.customer_phone ? `<p>الهاتف: ${escapeReceiptText(lastOrder.customer_phone)}</p>` : ''}
+        ${lastOrder.type === 'delivery' && lastOrder.address ? `<p>العنوان: ${escapeReceiptText(lastOrder.address)}</p>` : ''}
+        ${lastOrder.notes ? `<p>ملاحظات الطلب: ${escapeReceiptText(lastOrder.notes)}</p>` : ''}
         <table>
           <tr><th>الصنف</th><th>ك</th><th>السعر</th></tr>
-          ${items.map((i: any) => `<tr><td>${i.item_name || i.name || '-'}</td><td>${i.quantity || i.qty || 0}</td><td>${parseFloat(i.line_total || i.total_price || i.total || 0).toFixed(2)}</td></tr>`).join('')}
+          ${items.map((i: any) => `
+            <tr>
+              <td>
+                ${escapeReceiptText(i.item_name || i.name || '-')}
+                ${i.special_request ? `<div style="font-size:12px;color:#666;margin-top:4px;">ملاحظة: ${escapeReceiptText(i.special_request)}</div>` : ''}
+              </td>
+              <td>${i.quantity || i.qty || 0}</td>
+              <td>${parseFloat(i.line_total || i.total_price || i.total || 0).toFixed(2)}</td>
+            </tr>
+          `).join('')}
         </table>
         <hr/>
         <p>المجموع: ${parseFloat(lastOrder.subtotal || 0).toFixed(2)}</p>
