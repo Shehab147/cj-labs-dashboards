@@ -238,6 +238,7 @@ const POS = () => {
       })
       if (res.status === 'success') {
         setSnackbar({ open: true, message: 'تم تسجيل الدفع بنجاح', severity: 'success' })
+        fetchData()
       } else {
         setSnackbar({ open: true, message: res.message || 'فشل تسجيل الدفع', severity: 'error' })
       }
@@ -350,13 +351,20 @@ const POS = () => {
   return (
     <>
       {/* Shift info bar */}
-      <Box className='flex items-center justify-between mb-4 p-3 rounded border bg-primary/5'>
-        <Box className='flex items-center gap-2'>
+      <Box className='flex items-center justify-between mb-4 p-3 rounded border bg-primary/5 flex-wrap gap-2'>
+        <Box className='flex items-center gap-2 flex-wrap'>
           <Chip label='وردية نشطة' color='success' size='small' />
           <Typography variant='body2' color='text.secondary'>
             بدأت: {currentShift?.started_at ? new Date(currentShift.started_at).toLocaleTimeString('ar-SA') : ''}
             {currentShift?.opening_cash && ` · افتتاح: ${parseFloat(currentShift.opening_cash).toFixed(2)} ج.م`}
           </Typography>
+          {currentShift?.expected_cash !== undefined && (
+            <Chip
+              size='small'
+              color='primary'
+              label={`المتوقع في الدرج: ${parseFloat(currentShift.expected_cash).toFixed(2)} ج.م`}
+            />
+          )}
         </Box>
         <Button variant='outlined' color='error' size='small' onClick={() => setEndShiftDialogOpen(true)}>
           إنهاء الوردية
@@ -624,6 +632,19 @@ const POS = () => {
       <Dialog open={endShiftDialogOpen} onClose={() => setEndShiftDialogOpen(false)} maxWidth='xs' fullWidth>
         <DialogTitle>إنهاء الوردية</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: '1rem !important' }}>
+          {currentShift && (
+            <Box className='p-3 rounded border bg-primary/5 flex flex-col gap-1'>
+              <Typography variant='caption' color='text.secondary'>
+                النقدية الافتتاحية: {parseFloat(currentShift.opening_cash || 0).toFixed(2)} ج.م
+              </Typography>
+              <Typography variant='caption' color='text.secondary'>
+                إجمالي مبيعات النقد: {parseFloat(currentShift.cash_revenue || 0).toFixed(2)} ج.م
+              </Typography>
+              <Typography variant='body2' fontWeight={600}>
+                المبلغ المتوقع في الدرج: {parseFloat(currentShift.expected_cash || 0).toFixed(2)} ج.م
+              </Typography>
+            </Box>
+          )}
           <TextField
             label='النقدية الختامية الفعلية (ج.م)'
             type='number'

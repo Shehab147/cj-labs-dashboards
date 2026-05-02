@@ -261,6 +261,16 @@ switch ($action) {
              WHERE cs.user_id = ? AND cs.status = "open"',
             [$u['id']]
         );
+        if ($shift) {
+            $rev = row(
+                'SELECT COALESCE(SUM(total),0) AS rev FROM orders
+                 WHERE cashier_shift_id = ? AND payment_method = "cash"
+                   AND payment_status IN ("paid","partially_refunded") AND order_status != "cancelled"',
+                [(int)$shift['id']]
+            );
+            $shift['cash_revenue']  = (float)$rev['rev'];
+            $shift['expected_cash'] = (float)$shift['opening_cash'] + (float)$rev['rev'];
+        }
         ok(['shift' => $shift]);
         break;
 
