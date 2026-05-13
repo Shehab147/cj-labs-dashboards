@@ -1,5 +1,19 @@
 <?php
 require_once 'new/config.php';
+
+// ─── Timezone: force Cairo / Egypt for both PHP and MySQL ────────────────────
+// PHP side (affects date(), strtotime(), etc.)
+date_default_timezone_set('Africa/Cairo');
+
+// MySQL side (affects NOW(), CURDATE(), CURRENT_TIMESTAMP, DATE(created_at), …)
+// Try the named zone first (requires mysql_tzinfo_to_sql loaded). Fall back to
+// a fixed +02:00 offset if the named zone isn't available on the server.
+if (isset($conn) && $conn instanceof mysqli) {
+    if (!@$conn->query("SET time_zone = 'Africa/Cairo'")) {
+        $conn->query("SET time_zone = '+02:00'");
+    }
+}
+
 /*
  * Royal Doughnuts Restaurant Backend
  * نظام إدارة مطعم رويال دونتس
@@ -254,7 +268,7 @@ switch ($action) {
         break;
 
     case 'get_my_shift':
-        $u     = role(['cashier', 'super_admin']);
+       $u     = role(['cashier', 'super_admin']);
         $shift = row(
             'SELECT cs.*, u.full_name AS cashier_name FROM cashier_shifts cs
              JOIN users u ON u.id = cs.user_id
@@ -273,6 +287,7 @@ switch ($action) {
         }
         ok(['shift' => $shift]);
         break;
+
 
     // =======================================================================
     // KITCHEN SHIFTS
@@ -1091,30 +1106,70 @@ switch ($action) {
 
     case 'get_dashboard':
         role(['super_admin']);
-        $today = date('Y-m-d');
-        $today_report = row('SELECT * FROM v_daily_profit WHERE report_date = ?', [$today]);
-        if (!$today_report) {
-            $today_report = row(
-                'SELECT ? AS report_date,
-                        COUNT(*) AS total_orders,
-                        COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN subtotal ELSE 0 END), 0) AS gross_income,
-                        COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN discount_amount ELSE 0 END), 0) AS total_discounts,
-                        COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN total ELSE 0 END), 0) AS net_income,
-                        COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN total ELSE 0 END), 0) AS net_profit,
-                        COUNT(CASE WHEN order_status = "cancelled" THEN 1 END) AS cancelled_orders
-                 FROM orders WHERE DATE(created_at) = ?',
-                [$today, $today]
-            );
+
+        // Business day: 9 PM – 4 AM (crosses midnight).
+        // Timezone is already forced to Africa/Cairo at the top of this file.
+        $now  = new DateTime();
+        $hour = (int)$now->format('G'); // 0-23
+
+        if ($hour < 4) {
+            // e.g. 2 AM on day 2 → shift started 9 PM on day 1
+            $shift_start_dt = (clone $now)->modify('-1 day')->setTime(21, 0, 0);
+            $shift_end_dt   = (clone $now)->setTime(4, 0, 0);
+        } elseif ($hour >= 21) {
+            // e.g. 10 PM on day 1 → shift started 9 PM today
+            $shift_start_dt = (clone $now)->setTime(21, 0, 0);
+            $shift_end_dt   = (clone $now)->modify('+1 day')->setTime(4, 0, 0);
+        } else {
+            // 4 AM – 9 PM: between shifts, show last completed shift window
+            $shift_start_dt = (clone $now)->modify('-1 day')->setTime(21, 0, 0);
+            $shift_end_dt   = (clone $now)->setTime(4, 0, 0);
         }
-        // Today's expenses
-        $expenses_row = row(
-            'SELECT COALESCE(SUM(amount), 0) AS total_expenses FROM expenses WHERE expense_date = ?',
-            [$today]
+
+        $shift_start      = $shift_start_dt->format('Y-m-d H:i:s');
+        $shift_end        = $shift_end_dt->format('Y-m-d H:i:s');
+        $shift_start_date = $shift_start_dt->format('Y-m-d');
+        $shift_end_date   = $shift_end_dt->format('Y-m-d');
+
+        // Compute the shift report from base tables using the full datetime range
+        $today_report = row(
+            'SELECT ? AS report_date,
+                    COUNT(*) AS total_orders,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN total ELSE 0 END), 0) AS gross_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN subtotal ELSE 0 END), 0) AS gross_subtotal,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN discount_amount ELSE 0 END), 0) AS total_discounts,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN delivery_cost ELSE 0 END), 0) AS total_delivery,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method = "cash" THEN total ELSE 0 END), 0) AS cash_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method != "cash" THEN total ELSE 0 END), 0) AS non_cash_income,
+                    COUNT(CASE WHEN order_status = "cancelled" THEN 1 END) AS cancelled_orders
+             FROM orders WHERE created_at BETWEEN ? AND ?',
+            [$shift_start, $shift_start, $shift_end]
         );
-        $today_report['total_expenses'] = $expenses_row['total_expenses'] ?? '0.00';
+
+        $expenses_row = row(
+            'SELECT COALESCE(SUM(amount), 0) AS total_expenses
+             FROM expenses WHERE expense_date BETWEEN ? AND ?',
+            [$shift_start_date, $shift_end_date]
+        );
+        $stock_row = row(
+            'SELECT COALESCE(SUM(qty_change * unit_cost), 0) AS stock_costs
+             FROM stock_transactions
+             WHERE type = "purchase" AND unit_cost IS NOT NULL
+               AND created_at BETWEEN ? AND ?',
+            [$shift_start, $shift_end]
+        );
+        $today_report['total_expenses'] = (float)($expenses_row['total_expenses'] ?? 0);
+        $today_report['stock_costs']    = (float)($stock_row['stock_costs'] ?? 0);
+        $today_report['net_profit']     = round(
+            (float)$today_report['gross_income']
+            - (float)$today_report['total_expenses']
+            - (float)$today_report['stock_costs'],
+            2
+        );
 
         ok([
             'today_report'        => $today_report,
+            'shift_window'        => ['start' => $shift_start, 'end' => $shift_end],
             'low_stock_items'     => rows('SELECT * FROM v_low_stock ORDER BY name'),
             'open_cashier_shifts' => rows(
                 'SELECT cs.*, u.full_name AS cashier_name FROM cashier_shifts cs JOIN users u ON u.id = cs.user_id WHERE cs.status = "open"'
@@ -1132,37 +1187,307 @@ switch ($action) {
         role(['super_admin']);
         $from = $_GET['from'] ?? date('Y-m-d');
         $to   = $_GET['to']   ?? date('Y-m-d');
-        ok(['report' => rows('SELECT * FROM v_daily_profit WHERE report_date BETWEEN ? AND ? ORDER BY report_date DESC', [$from, $to])]);
+
+        // Build a per-day report directly from base tables so days with only
+        // expenses (and no income) still appear, and numbers are consistent.
+        $income = rows(
+            'SELECT DATE(created_at) AS report_date,
+                    COUNT(*) AS total_orders,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN total ELSE 0 END), 0) AS gross_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN discount_amount ELSE 0 END), 0) AS total_discounts,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method = "cash" THEN total ELSE 0 END), 0) AS cash_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method != "cash" THEN total ELSE 0 END), 0) AS non_cash_income,
+                    COUNT(CASE WHEN order_status = "cancelled" THEN 1 END) AS cancelled_orders
+             FROM orders
+             WHERE DATE(created_at) BETWEEN ? AND ?
+             GROUP BY DATE(created_at)',
+            [$from, $to]
+        );
+        $expenses_by_day = rows(
+            'SELECT expense_date AS report_date, COALESCE(SUM(amount),0) AS total_expenses, COUNT(*) AS expense_count
+             FROM expenses WHERE expense_date BETWEEN ? AND ? GROUP BY expense_date',
+            [$from, $to]
+        );
+        $stock_by_day = rows(
+            'SELECT DATE(created_at) AS report_date, COALESCE(SUM(qty_change * unit_cost),0) AS stock_costs
+             FROM stock_transactions
+             WHERE type = "purchase" AND unit_cost IS NOT NULL
+               AND DATE(created_at) BETWEEN ? AND ?
+             GROUP BY DATE(created_at)',
+            [$from, $to]
+        );
+
+        $by_date = [];
+        foreach ($income as $r) {
+            $by_date[$r['report_date']] = [
+                'report_date'      => $r['report_date'],
+                'total_orders'     => (int)$r['total_orders'],
+                'cancelled_orders' => (int)$r['cancelled_orders'],
+                'gross_income'     => (float)$r['gross_income'],
+                'total_discounts'  => (float)$r['total_discounts'],
+                'cash_income'      => (float)$r['cash_income'],
+                'non_cash_income'  => (float)$r['non_cash_income'],
+                'total_expenses'   => 0.0,
+                'stock_costs'      => 0.0,
+                'net_profit'       => 0.0,
+            ];
+        }
+        foreach ($expenses_by_day as $r) {
+            $d = $r['report_date'];
+            if (!isset($by_date[$d])) {
+                $by_date[$d] = [
+                    'report_date'=>$d,'total_orders'=>0,'cancelled_orders'=>0,'gross_income'=>0.0,
+                    'total_discounts'=>0.0,'cash_income'=>0.0,'non_cash_income'=>0.0,
+                    'total_expenses'=>0.0,'stock_costs'=>0.0,'net_profit'=>0.0,
+                ];
+            }
+            $by_date[$d]['total_expenses'] = (float)$r['total_expenses'];
+        }
+        foreach ($stock_by_day as $r) {
+            $d = $r['report_date'];
+            if (!isset($by_date[$d])) {
+                $by_date[$d] = [
+                    'report_date'=>$d,'total_orders'=>0,'cancelled_orders'=>0,'gross_income'=>0.0,
+                    'total_discounts'=>0.0,'cash_income'=>0.0,'non_cash_income'=>0.0,
+                    'total_expenses'=>0.0,'stock_costs'=>0.0,'net_profit'=>0.0,
+                ];
+            }
+            $by_date[$d]['stock_costs'] = (float)$r['stock_costs'];
+        }
+        foreach ($by_date as &$d) {
+            $d['net_profit'] = round($d['gross_income'] - $d['total_expenses'] - $d['stock_costs'], 2);
+        }
+        unset($d);
+        krsort($by_date);
+        ok(['report' => array_values($by_date)]);
         break;
 
     case 'get_income_report':
         role(['super_admin']);
         $from = $_GET['from'] ?? date('Y-m-d');
         $to   = $_GET['to']   ?? date('Y-m-d');
-        ok(['report' => rows('SELECT * FROM v_daily_income WHERE report_date BETWEEN ? AND ? ORDER BY report_date DESC', [$from, $to])]);
+        ok(['report' => rows(
+            'SELECT DATE(created_at) AS report_date,
+                    COUNT(*) AS total_orders,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN total ELSE 0 END), 0) AS gross_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN discount_amount ELSE 0 END), 0) AS total_discounts,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method = "cash" THEN total ELSE 0 END), 0) AS cash_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method != "cash" THEN total ELSE 0 END), 0) AS non_cash_income,
+                    COUNT(CASE WHEN order_status = "cancelled" THEN 1 END) AS cancelled_orders
+             FROM orders
+             WHERE DATE(created_at) BETWEEN ? AND ?
+             GROUP BY DATE(created_at)
+             ORDER BY report_date DESC',
+            [$from, $to]
+        )]);
+        break;
+
+    // -----------------------------------------------------------------
+    // Monthly report (per-day breakdown + totals for a given month)
+    // params: ?month=YYYY-MM   (default: current month)
+    // -----------------------------------------------------------------
+    case 'get_monthly_report':
+        role(['super_admin']);
+        $month = $_GET['month'] ?? date('Y-m');
+        if (!preg_match('/^\d{4}-\d{2}$/', $month)) fail('صيغة الشهر غير صحيحة، استخدم YYYY-MM');
+        $from = $month . '-01';
+        $to   = date('Y-m-t', strtotime($from));
+
+        // Per-day breakdown (reuse same logic as get_daily_report)
+        $income = rows(
+            'SELECT DATE(created_at) AS report_date,
+                    COUNT(*) AS total_orders,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN total ELSE 0 END), 0) AS gross_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN discount_amount ELSE 0 END), 0) AS total_discounts,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method = "cash" THEN total ELSE 0 END), 0) AS cash_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method != "cash" THEN total ELSE 0 END), 0) AS non_cash_income,
+                    COUNT(CASE WHEN order_status = "cancelled" THEN 1 END) AS cancelled_orders
+             FROM orders WHERE DATE(created_at) BETWEEN ? AND ?
+             GROUP BY DATE(created_at)',
+            [$from, $to]
+        );
+        $expenses_by_day = rows(
+            'SELECT expense_date AS report_date, COALESCE(SUM(amount),0) AS total_expenses
+             FROM expenses WHERE expense_date BETWEEN ? AND ? GROUP BY expense_date',
+            [$from, $to]
+        );
+        $stock_by_day = rows(
+            'SELECT DATE(created_at) AS report_date, COALESCE(SUM(qty_change * unit_cost),0) AS stock_costs
+             FROM stock_transactions
+             WHERE type = "purchase" AND unit_cost IS NOT NULL
+               AND DATE(created_at) BETWEEN ? AND ?
+             GROUP BY DATE(created_at)',
+            [$from, $to]
+        );
+
+        $by_date = [];
+        $blank = function($d) {
+            return [
+                'report_date'=>$d,'total_orders'=>0,'cancelled_orders'=>0,'gross_income'=>0.0,
+                'total_discounts'=>0.0,'cash_income'=>0.0,'non_cash_income'=>0.0,
+                'total_expenses'=>0.0,'stock_costs'=>0.0,'net_profit'=>0.0,
+            ];
+        };
+        foreach ($income as $r) {
+            $by_date[$r['report_date']] = array_merge($blank($r['report_date']), [
+                'total_orders'     => (int)$r['total_orders'],
+                'cancelled_orders' => (int)$r['cancelled_orders'],
+                'gross_income'     => (float)$r['gross_income'],
+                'total_discounts'  => (float)$r['total_discounts'],
+                'cash_income'      => (float)$r['cash_income'],
+                'non_cash_income'  => (float)$r['non_cash_income'],
+            ]);
+        }
+        foreach ($expenses_by_day as $r) {
+            if (!isset($by_date[$r['report_date']])) $by_date[$r['report_date']] = $blank($r['report_date']);
+            $by_date[$r['report_date']]['total_expenses'] = (float)$r['total_expenses'];
+        }
+        foreach ($stock_by_day as $r) {
+            if (!isset($by_date[$r['report_date']])) $by_date[$r['report_date']] = $blank($r['report_date']);
+            $by_date[$r['report_date']]['stock_costs'] = (float)$r['stock_costs'];
+        }
+
+        $totals = [
+            'total_orders'=>0,'cancelled_orders'=>0,'gross_income'=>0.0,'total_discounts'=>0.0,
+            'cash_income'=>0.0,'non_cash_income'=>0.0,'total_expenses'=>0.0,'stock_costs'=>0.0,'net_profit'=>0.0,
+        ];
+        foreach ($by_date as &$d) {
+            $d['net_profit'] = round($d['gross_income'] - $d['total_expenses'] - $d['stock_costs'], 2);
+            foreach ($totals as $k => $_) $totals[$k] += $d[$k];
+        }
+        unset($d);
+        ksort($by_date);
+
+        // Top-selling items in this month
+        $top_items = rows(
+            'SELECT oi.menu_item_id, oi.item_name,
+                    SUM(oi.quantity) AS total_qty_sold,
+                    SUM(oi.line_total) AS total_revenue,
+                    COUNT(DISTINCT oi.order_id) AS order_appearances
+             FROM order_items oi JOIN orders o ON o.id = oi.order_id
+             WHERE o.order_status != "cancelled" AND DATE(o.created_at) BETWEEN ? AND ?
+             GROUP BY oi.menu_item_id, oi.item_name
+             ORDER BY total_qty_sold DESC LIMIT 10',
+            [$from, $to]
+        );
+
+        // Expenses grouped by category
+        $expenses_by_cat = rows(
+            'SELECT ec.id, ec.name, COALESCE(SUM(e.amount),0) AS total
+             FROM expense_categories ec
+             LEFT JOIN expenses e ON e.category_id = ec.id AND e.expense_date BETWEEN ? AND ?
+             GROUP BY ec.id, ec.name
+             HAVING total > 0
+             ORDER BY total DESC',
+            [$from, $to]
+        );
+
+        ok([
+            'month'             => $month,
+            'from'              => $from,
+            'to'                => $to,
+            'days'              => array_values($by_date),
+            'totals'            => $totals,
+            'top_items'         => $top_items,
+            'expenses_by_category' => $expenses_by_cat,
+        ]);
+        break;
+
+    // -----------------------------------------------------------------
+    // Aggregate analytics summary for any range (totals only)
+    // params: ?from=YYYY-MM-DD&to=YYYY-MM-DD  (default: current month)
+    // -----------------------------------------------------------------
+    case 'get_analytics_summary':
+        role(['super_admin']);
+        $from = $_GET['from'] ?? date('Y-m-01');
+        $to   = $_GET['to']   ?? date('Y-m-d');
+
+        $income = row(
+            'SELECT COUNT(*) AS total_orders,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN total ELSE 0 END), 0) AS gross_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN subtotal ELSE 0 END), 0) AS gross_subtotal,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN discount_amount ELSE 0 END), 0) AS total_discounts,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" THEN delivery_cost ELSE 0 END), 0) AS total_delivery,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method = "cash" THEN total ELSE 0 END), 0) AS cash_income,
+                    COALESCE(SUM(CASE WHEN order_status != "cancelled" AND payment_method != "cash" THEN total ELSE 0 END), 0) AS non_cash_income,
+                    COUNT(CASE WHEN order_status = "cancelled" THEN 1 END) AS cancelled_orders
+             FROM orders WHERE DATE(created_at) BETWEEN ? AND ?',
+            [$from, $to]
+        );
+        $exp = row(
+            'SELECT COALESCE(SUM(amount),0) AS total_expenses, COUNT(*) AS expense_count
+             FROM expenses WHERE expense_date BETWEEN ? AND ?',
+            [$from, $to]
+        );
+        $stock = row(
+            'SELECT COALESCE(SUM(qty_change * unit_cost),0) AS stock_costs
+             FROM stock_transactions
+             WHERE type = "purchase" AND unit_cost IS NOT NULL
+               AND DATE(created_at) BETWEEN ? AND ?',
+            [$from, $to]
+        );
+        $by_type = rows(
+            'SELECT type, COUNT(*) AS cnt, COALESCE(SUM(total),0) AS total_amount
+             FROM orders
+             WHERE order_status != "cancelled" AND DATE(created_at) BETWEEN ? AND ?
+             GROUP BY type',
+            [$from, $to]
+        );
+        $by_payment = rows(
+            'SELECT payment_method, COUNT(*) AS cnt, COALESCE(SUM(total),0) AS total_amount
+             FROM orders
+             WHERE order_status != "cancelled" AND DATE(created_at) BETWEEN ? AND ?
+             GROUP BY payment_method',
+            [$from, $to]
+        );
+
+        $gross   = (float)$income['gross_income'];
+        $expense = (float)$exp['total_expenses'];
+        $costs   = (float)$stock['stock_costs'];
+        $net     = round($gross - $expense - $costs, 2);
+        $non_cancelled = (int)$income['total_orders'] - (int)$income['cancelled_orders'];
+        $avg_order = $non_cancelled > 0 ? round($gross / $non_cancelled, 2) : 0.0;
+
+        ok([
+            'from'             => $from,
+            'to'               => $to,
+            'totals'           => [
+                'total_orders'       => (int)$income['total_orders'],
+                'completed_orders'   => $non_cancelled,
+                'cancelled_orders'   => (int)$income['cancelled_orders'],
+                'gross_income'       => $gross,
+                'gross_subtotal'     => (float)$income['gross_subtotal'],
+                'total_discounts'    => (float)$income['total_discounts'],
+                'total_delivery'     => (float)$income['total_delivery'],
+                'cash_income'        => (float)$income['cash_income'],
+                'non_cash_income'    => (float)$income['non_cash_income'],
+                'total_expenses'     => $expense,
+                'stock_costs'        => $costs,
+                'net_profit'         => $net,
+                'average_order_value'=> $avg_order,
+            ],
+            'orders_by_type'    => $by_type,
+            'orders_by_payment' => $by_payment,
+        ]);
         break;
 
     case 'get_top_selling':
         role(['super_admin']);
         $limit = min(50, max(1, (int)($_GET['limit'] ?? 10)));
-        $from  = $_GET['from'] ?? '';
-        $to    = $_GET['to']   ?? '';
-        if ($from && $to) {
-            $data = rows(
-                'SELECT oi.menu_item_id, oi.item_name,
-                        SUM(oi.quantity) AS total_qty_sold,
-                        SUM(oi.line_total) AS total_revenue,
-                        COUNT(DISTINCT oi.order_id) AS order_appearances
-                 FROM order_items oi JOIN orders o ON o.id = oi.order_id
-                 WHERE o.order_status != "cancelled" AND DATE(o.created_at) BETWEEN ? AND ?
-                 GROUP BY oi.menu_item_id, oi.item_name
-                 ORDER BY total_qty_sold DESC LIMIT ' . $limit,
-                [$from, $to]
-            );
-        } else {
-            $data = rows('SELECT * FROM v_top_selling_items LIMIT ' . $limit);
-        }
-        ok(['items' => $data]);
+        $from  = $_GET['from'] ?? date('Y-m-01');
+        $to    = $_GET['to']   ?? date('Y-m-d');
+        $data = rows(
+            'SELECT oi.menu_item_id, oi.item_name,
+                    SUM(oi.quantity) AS total_qty_sold,
+                    SUM(oi.line_total) AS total_revenue,
+                    COUNT(DISTINCT oi.order_id) AS order_appearances
+             FROM order_items oi JOIN orders o ON o.id = oi.order_id
+             WHERE o.order_status != "cancelled" AND DATE(o.created_at) BETWEEN ? AND ?
+             GROUP BY oi.menu_item_id, oi.item_name
+             ORDER BY total_qty_sold DESC LIMIT ' . $limit,
+            [$from, $to]
+        );
+        ok(['items' => $data, 'from' => $from, 'to' => $to]);
         break;
 
     case 'get_cashier_shifts':
