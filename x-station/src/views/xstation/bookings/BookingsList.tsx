@@ -207,12 +207,14 @@ const BookingsList = ({ dictionary }: BookingsListProps) => {
     fetchData()
     // Mark as mounted after initial data fetch
     const timer = setTimeout(() => setIsMounted(true), 2000) // Give 2 seconds grace period
-    
-    // Refresh data every 2 seconds (silent - no loading spinner)
+
+    // Refresh data every 15 seconds (silent - no loading spinner).
+    // Note: the local 1s countdown effect handles real-time timer UI without
+    // requiring a network request, so we don't need a 2s server poll here.
     const refreshInterval = setInterval(() => {
       fetchData(false)
-    }, 2000)
-    
+    }, 15000)
+
     return () => {
       clearTimeout(timer)
       clearInterval(refreshInterval)
