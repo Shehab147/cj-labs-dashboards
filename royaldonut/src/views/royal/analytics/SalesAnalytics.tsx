@@ -20,6 +20,7 @@ import TableRow from '@mui/material/TableRow'
 
 import { reportsApi } from '@/services/api'
 import CustomAvatar from '@core/components/mui/Avatar'
+import { printAnalyticsReport } from './printReport'
 
 const today = () => new Date().toISOString().split('T')[0]
 
@@ -68,6 +69,42 @@ const SalesAnalytics = () => {
   const netProfit = dailyReport.reduce((sum, row) => sum + parseFloat(row.net_profit || 0), 0)
   const cancelledOrders = incomeReport.reduce((sum, row) => sum + Number(row.cancelled_orders || 0), 0)
 
+  const handlePrint = () => {
+    printAnalyticsReport({
+      title: 'تحليلات المبيعات',
+      subtitle: `من ${startDate} إلى ${endDate}`,
+      metrics: [
+        { label: 'إجمالي الطلبات', value: totalOrders },
+        { label: 'إجمالي الدخل', value: grossIncome.toFixed(2) },
+        { label: 'صافي الربح', value: netProfit.toFixed(2) },
+        { label: 'طلبات ملغية', value: cancelledOrders }
+      ],
+      tables: [
+        {
+          title: 'تقرير الدخل اليومي',
+          headers: ['التاريخ', 'الطلبات', 'إجمالي الدخل', 'الخصومات', 'دخل نقدي', 'دخل غير نقدي', 'الملغي'],
+          rows: incomeReport.map((day: any) => [
+            day.report_date,
+            day.total_orders,
+            parseFloat(day.gross_income || 0).toFixed(2),
+            parseFloat(day.total_discounts || 0).toFixed(2),
+            parseFloat(day.cash_income || 0).toFixed(2),
+            parseFloat(day.non_cash_income || 0).toFixed(2),
+            day.cancelled_orders
+          ])
+        },
+        {
+          title: 'تقرير الربح اليومي',
+          headers: ['التاريخ', 'صافي الربح'],
+          rows: dailyReport.map((day: any) => [
+            day.report_date || day.date || '—',
+            parseFloat(day.net_profit || 0).toFixed(2)
+          ])
+        }
+      ]
+    })
+  }
+
   return (
     <Grid container spacing={6}>
       <Grid size={{ xs: 12 }}>
@@ -76,6 +113,7 @@ const SalesAnalytics = () => {
             <TextField label='من تاريخ' type='date' value={startDate} onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} size='small' />
             <TextField label='إلى تاريخ' type='date' value={endDate} onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} size='small' />
             <Button variant='contained' onClick={fetchData}>تطبيق</Button>
+            <Button variant='outlined' onClick={handlePrint} startIcon={<i className='tabler-printer' />}>طباعة</Button>
           </CardContent>
         </Card>
       </Grid>

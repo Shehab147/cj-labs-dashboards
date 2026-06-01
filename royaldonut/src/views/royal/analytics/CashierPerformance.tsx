@@ -22,6 +22,7 @@ import Button from '@mui/material/Button'
 
 import { reportsApi } from '@/services/api'
 import CustomAvatar from '@core/components/mui/Avatar'
+import { printAnalyticsReport } from './printReport'
 
 const today = () => new Date().toISOString().split('T')[0]
 
@@ -60,6 +61,37 @@ const CashierPerformance = () => {
   const totalOrders = shifts.reduce((sum, s) => sum + Number(s.orders_count || 0), 0)
   const totalSales = shifts.reduce((sum, s) => sum + parseFloat(s.shift_revenue || 0), 0)
 
+  const handlePrint = () => {
+    printAnalyticsReport({
+      title: 'أداء الكاشير',
+      subtitle: `من ${fromDate} إلى ${toDate}`,
+      metrics: [
+        { label: 'عدد الكاشير', value: uniqueCashiers },
+        { label: 'إجمالي الطلبات', value: totalOrders },
+        { label: 'إجمالي المبيعات', value: totalSales.toFixed(2) }
+      ],
+      tables: [
+        {
+          title: 'أداء الكاشير حسب الورديات',
+          headers: ['الكاشير', 'الحالة', 'عدد الطلبات', 'إيراد الوردية', 'فرق النقدية', 'بداية الوردية', 'نهاية الوردية'],
+          rows: shifts.map((shift: any) => {
+            const cashDifference = parseFloat(shift.cash_difference || 0)
+
+            return [
+              `${shift.cashier_name || '—'} #${shift.shift_id || '—'}`,
+              shift.status === 'open' ? 'نشطة' : 'مغلقة',
+              shift.orders_count || 0,
+              parseFloat(shift.shift_revenue || 0).toFixed(2),
+              shift.cash_difference == null ? '—' : cashDifference.toFixed(2),
+              shift.started_at ? new Date(shift.started_at).toLocaleString('ar-SA') : '—',
+              shift.ended_at ? new Date(shift.ended_at).toLocaleString('ar-SA') : '—'
+            ]
+          })
+        }
+      ]
+    })
+  }
+
   return (
     <Grid container spacing={6}>
       <Grid size={{ xs: 12 }}>
@@ -68,6 +100,7 @@ const CashierPerformance = () => {
             <TextField label='من تاريخ' type='date' value={fromDate} onChange={e => setFromDate(e.target.value)} InputLabelProps={{ shrink: true }} size='small' />
             <TextField label='إلى تاريخ' type='date' value={toDate} onChange={e => setToDate(e.target.value)} InputLabelProps={{ shrink: true }} size='small' />
             <Button variant='contained' onClick={fetchData}>تطبيق</Button>
+            <Button variant='outlined' onClick={handlePrint} startIcon={<i className='tabler-printer' />}>طباعة</Button>
           </CardContent>
         </Card>
       </Grid>

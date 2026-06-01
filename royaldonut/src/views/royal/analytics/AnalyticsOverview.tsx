@@ -17,9 +17,11 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import Chip from '@mui/material/Chip'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 
 import { reportsApi } from '@/services/api'
 import CustomAvatar from '@core/components/mui/Avatar'
+import { printAnalyticsReport } from './printReport'
 
 const AnalyticsOverview = () => {
   const [dashboard, setDashboard] = useState<any>(null)
@@ -56,8 +58,62 @@ const AnalyticsOverview = () => {
   const openCashierShifts = dashboard?.open_cashier_shifts || []
   const openKitchenShifts = dashboard?.open_kitchen_shifts || []
 
+  const handlePrint = () => {
+    printAnalyticsReport({
+      title: 'نظرة عامة على التحليلات',
+      subtitle: 'تقرير اليوم',
+      metrics: [
+        { label: 'طلبات اليوم', value: report.total_orders || 0 },
+        { label: 'إجمالي الدخل اليوم', value: parseFloat(report.gross_income || 0).toFixed(2) },
+        { label: 'صافي الربح اليوم', value: parseFloat(report.net_profit || 0).toFixed(2) },
+        { label: 'أصناف منخفضة المخزون', value: lowStockItems.length }
+      ],
+      lists: [
+        {
+          title: 'حالات الطلبات الحالية',
+          rows: orderCounts.map((row: any) => [row.order_status, row.cnt])
+        },
+        {
+          title: 'ورديات الكاشير المفتوحة',
+          rows: openCashierShifts.map((shift: any) => [
+            shift.cashier_name,
+            shift.started_at ? new Date(shift.started_at).toLocaleString('ar-SA') : '—',
+            `${parseFloat(shift.opening_cash || 0).toFixed(2)} ج.م`
+          ])
+        },
+        {
+          title: 'ورديات المطبخ المفتوحة',
+          rows: openKitchenShifts.map((shift: any) => [
+            shift.full_name,
+            shift.started_at ? new Date(shift.started_at).toLocaleString('ar-SA') : '—'
+          ])
+        }
+      ],
+      tables: [
+        {
+          title: 'أفضل الأصناف مبيعاً',
+          headers: ['#', 'الصنف', 'الكمية', 'الإيراد'],
+          rows: topItems.map((item: any, index: number) => [
+            index + 1,
+            item.name || item.item_name || '-',
+            item.total_qty_sold || item.total_qty || item.qty || 0,
+            parseFloat(item.total_revenue || item.revenue || 0).toFixed(2)
+          ])
+        }
+      ]
+    })
+  }
+
   return (
     <Grid container spacing={6}>
+      <Grid size={{ xs: 12 }}>
+        <Box className='flex justify-end'>
+          <Button variant='outlined' onClick={handlePrint} startIcon={<i className='tabler-printer' />}>
+            طباعة
+          </Button>
+        </Box>
+      </Grid>
+
       <Grid size={{ xs: 12, sm: 6, md: 3 }}>
         <Card>
           <CardContent className='flex flex-col items-center gap-2 p-6'>

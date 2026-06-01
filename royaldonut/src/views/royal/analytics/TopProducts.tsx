@@ -20,6 +20,7 @@ import Button from '@mui/material/Button'
 
 import { reportsApi } from '@/services/api'
 import CustomAvatar from '@core/components/mui/Avatar'
+import { printAnalyticsReport } from './printReport'
 
 const today = () => new Date().toISOString().split('T')[0]
 
@@ -60,6 +61,29 @@ const TopProducts = () => {
   )
   const totalRevenue = items.reduce((sum, item) => sum + parseFloat(item.total_revenue || item.revenue || 0), 0)
 
+  const handlePrint = () => {
+    printAnalyticsReport({
+      title: 'الأصناف الأعلى مبيعاً',
+      subtitle: `من ${startDate} إلى ${endDate}`,
+      metrics: [
+        { label: 'إجمالي الكميات المباعة', value: totalQty },
+        { label: 'إجمالي الإيراد', value: totalRevenue.toFixed(2) }
+      ],
+      tables: [
+        {
+          title: 'الأصناف الأعلى مبيعاً',
+          headers: ['#', 'الصنف', 'الكمية', 'الإيراد'],
+          rows: items.map((item: any, index: number) => [
+            index + 1,
+            item.item_name || item.name || item.product_name || '-',
+            Number(item.total_qty_sold || item.total_qty || item.qty || item.total_quantity_sold || 0),
+            parseFloat(item.total_revenue || item.revenue || 0).toFixed(2)
+          ])
+        }
+      ]
+    })
+  }
+
   return (
     <Grid container spacing={6}>
       <Grid size={{ xs: 12 }}>
@@ -68,6 +92,7 @@ const TopProducts = () => {
             <TextField label='من تاريخ' type='date' value={startDate} onChange={e => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} size='small' />
             <TextField label='إلى تاريخ' type='date' value={endDate} onChange={e => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} size='small' />
             <Button variant='contained' onClick={fetchData}>تطبيق</Button>
+            <Button variant='outlined' onClick={handlePrint} startIcon={<i className='tabler-printer' />}>طباعة</Button>
           </CardContent>
         </Card>
       </Grid>
