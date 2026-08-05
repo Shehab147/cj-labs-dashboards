@@ -324,12 +324,18 @@ export const orderApi = {
     apply_loyalty_discount?: boolean
   }) => apiCall('addOrder', data),
   
-  quick: (data: {
+  quick: async (data: {
     customer_phone: string
     customer_name?: string
     items: Array<{ item_id: number; quantity: number }>
     booking_id?: number // Optional: link order to an active booking
-  }) => apiCall('quickOrder', data),
+  }) => {
+    const response = await apiCall('quickOrder', data)
+    if (response.status === 'success' && response.data && response.data.order_id !== undefined) {
+      response.data.id = response.data.id ?? response.data.order_id
+    }
+    return response
+  },
   
   list: () => apiCall('listOrders'),
   

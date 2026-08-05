@@ -20,6 +20,12 @@ import Typography from '@mui/material/Typography'
 import Divider from '@mui/material/Divider'
 import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
+import Box from '@mui/material/Box'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogActions from '@mui/material/DialogActions'
 
 // Third-party Imports
 import { signOut, useSession } from 'next-auth/react'
@@ -27,8 +33,12 @@ import { signOut, useSession } from 'next-auth/react'
 // Type Imports
 import type { Locale } from '@configs/i18n'
 
+// Config Imports
+import { i18n } from '@configs/i18n'
+
 // Hook Imports
 import { useSettings } from '@core/hooks/useSettings'
+import { useClientDictionary } from '@/hooks/useClientDictionary'
 
 // Util Imports
 import { getLocalizedUrl } from '@/utils/i18n'
@@ -58,6 +68,9 @@ const UserDropdown = () => {
   const [admin, setAdmin] = useState<any>(null)
   const [shiftLoading, setShiftLoading] = useState(false)
   const [hasActiveShift, setHasActiveShift] = useState(true) // Default to true to show End Shift initially
+  const [shiftEndModalOpen, setShiftEndModalOpen] = useState(false)
+  const [shiftEndExpectedCash, setShiftEndExpectedCash] = useState<number | null>(null)
+  const [shiftEndCashDifference, setShiftEndCashDifference] = useState<number | null>(null)
 
   // Refs
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -67,6 +80,7 @@ const UserDropdown = () => {
   const { data: session } = useSession()
   const { settings } = useSettings()
   const { lang: locale } = useParams()
+  const dictionary = useClientDictionary()
   const { showSuccess, showError } = useNotification()
 
   // Get admin data from localStorage
@@ -94,6 +108,12 @@ const UserDropdown = () => {
   const userName = admin?.name || session?.user?.name || ''
   const userEmail = admin?.email || session?.user?.email || ''
   const userImage = session?.user?.image || ''
+  const isRtl = i18n.langDirection[locale as keyof typeof i18n.langDirection] === 'rtl'
+
+  const toArabicDigits = (value: string | number) => {
+    const digits = '٠١٢٣٤٥٦٧٨٩'
+    return String(value).replace(/[0-9]/g, d => digits[parseInt(d, 10)])
+  }
 
   const handleDropdownOpen = () => {
     !open ? setOpen(true) : setOpen(false)
@@ -121,26 +141,32 @@ const UserDropdown = () => {
         // End shift
         const response = await shiftApi.end({})
         if (response.status === 'success') {
-          showSuccess('Shift ended successfully - تم إنهاء الوردية بنجاح')
+          const expectedCash = response.data?.expected_cash ?? response.data?.expectedCash ?? null
+          const cashDifference = response.data?.cash_difference ?? response.data?.cashDifference ?? null
+          const expectedCashValue = expectedCash !== null ? Number(expectedCash) : null
+          const cashDifferenceValue = cashDifference !== null ? Number(cashDifference) : null
+          setShiftEndExpectedCash(expectedCashValue)
+          setShiftEndCashDifference(cashDifferenceValue)
+          setShiftEndModalOpen(true)
           setHasActiveShift(false)
           setOpen(false)
         } else {
-          showError(response.message || 'Failed to end shift - فشل إنهاء الوردية')
+          showError(response.message || dictionary.shifts.shiftEndFailed)
         }
       } else {
         // Start shift
         const response = await shiftApi.start({})
         if (response.status === 'success') {
-          showSuccess('Shift started successfully - تم بدء الوردية بنجاح')
+          showSuccess(dictionary.shifts.shiftStarted)
           setHasActiveShift(true)
           setOpen(false)
         } else {
-          showError(response.message || 'Failed to start shift - فشل بدء الوردية')
+          showError(response.message || dictionary.shifts.shiftStartFailed)
         }
       }
     } catch (error) {
       console.error('Shift toggle error:', error)
-      showError(hasActiveShift ? 'Failed to end shift - فشل إنهاء الوردية' : 'Failed to start shift - فشل بدء الوردية')
+      showError(hasActiveShift ? dictionary.shifts.shiftEndFailed : dictionary.shifts.shiftStartFailed)
     } finally {
       setShiftLoading(false)
     }
@@ -157,6 +183,47 @@ const UserDropdown = () => {
 
   return (
     <>
+      <Dialog
+        open={shiftEndModalOpen}
+        onClose={() => setShiftEndModalOpen(false)}
+        aria-labelledby='shift-end-dialog-title'
+      >
+        <DialogTitle id='shift-end-dialog-title'>
+          {dictionary.shifts.shiftEndSummaryTitle}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {dictionary.shifts.shiftEndSummaryMessage}
+          </DialogContentText>
+          <Box className='mt-4'>
+            <Typography variant='body1'>
+              {dictionary.shifts.expectedCashAtEndOfShift}
+            </Typography>
+            <Typography variant='h6' className='font-semibold'>
+              {shiftEndExpectedCash !== null
+                ? `${isRtl ? toArabicDigits(shiftEndExpectedCash.toFixed(2)) : shiftEndExpectedCash.toFixed(2)} EGP`
+                : '-'}
+            </Typography>
+          </Box>
+          {shiftEndCashDifference !== null && (
+            <Box className='mt-3'>
+              <Typography variant='body1'>
+                {dictionary.shifts.cashDifference}
+              </Typography>
+              <Typography variant='h6' className='font-semibold'>
+                {isRtl
+                  ? `${toArabicDigits(shiftEndCashDifference.toFixed(2))} EGP`
+                  : `${shiftEndCashDifference.toFixed(2)} EGP`}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShiftEndModalOpen(false)} color='primary'>
+            {dictionary.common.close}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Badge
         ref={anchorRef}
         overlap='circular'
@@ -202,7 +269,7 @@ const UserDropdown = () => {
                   <Divider className='mlb-1' />
                   <MenuItem className='mli-2 gap-3' onClick={e => handleDropdownClose(e, '/pages/user-profile')}>
                     <i className='tabler-user' />
-                    <Typography color='text.primary'>My Profile</Typography>
+                    <Typography color='text.primary'>{dictionary.navigation.profile}</Typography>
                   </MenuItem>
                   {admin?.role !== 'superadmin' && (
                     <div className='flex items-center plb-2 pli-3'>
@@ -216,9 +283,11 @@ const UserDropdown = () => {
                         onClick={handleShiftToggle}
                         sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
                       >
-                        {shiftLoading 
-                          ? (hasActiveShift ? 'Ending...' : 'Starting...') 
-                          : (hasActiveShift ? 'End Shift - إنهاء الوردية' : 'Start Shift - بدء الوردية')}
+                        {shiftLoading
+                          ? dictionary.common.loading
+                          : hasActiveShift
+                          ? dictionary.shifts.endShift
+                          : dictionary.shifts.startShift}
                       </Button>
                     </div>
                   )}
@@ -232,7 +301,7 @@ const UserDropdown = () => {
                       onClick={handleUserLogout}
                       sx={{ '& .MuiButton-endIcon': { marginInlineStart: 1.5 } }}
                     >
-                      Logout - تسجيل خروج
+                      {dictionary.navigation.logout}
                     </Button>
                   </div>
                 </MenuList>

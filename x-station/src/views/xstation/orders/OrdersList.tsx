@@ -173,8 +173,9 @@ const OrdersList = ({ dictionary }: OrdersListProps) => {
         // Print receipt if requested
         if (shouldPrint && response.data) {
           const newOrder = response.data
+          const orderId = newOrder.order_id ?? newOrder.id
           printReceipt({
-            id: newOrder.id,
+            id: orderId,
             customer_name: customerName,
             customer_phone: customerPhone,
             items: orderData.items.map(item => ({
