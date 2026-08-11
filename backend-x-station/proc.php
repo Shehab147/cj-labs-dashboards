@@ -1190,6 +1190,10 @@ function addBooking(){
     
     // Optional discount (percentage or fixed amount)
     $discount = isset($input['discount']) ? (float)$input['discount'] : 0;
+
+    if($discount > 0 && !in_array($admin['role'], ['superadmin'])){
+        respond('error', 'لا يمكن تطبيق خصم إلا من قبل المشرف الأعلى.');
+    }
     
     // Get room hourly costs
     $stmt = $conn->prepare("SELECT hour_cost, multi_hour_cost, is_booked FROM rooms WHERE id = ?");
@@ -1497,6 +1501,11 @@ function endBooking(){
 function updateBookingDiscount(){
     global $conn;
     $admin = getAdmin();
+
+    if(!in_array($admin['role'], ['superadmin'])){
+        respond('error', 'لا يمكن تعديل الخصم إلا من قبل المشرف الأعلى .');
+    }
+
     $input = requireParams(['booking_id', 'discount']);
     $booking_id = (int)$input['booking_id'];
     $new_discount = (float)$input['discount'];
@@ -2070,6 +2079,10 @@ function addOrder(){
     $discount = isset($input['discount']) ? (float)$input['discount'] : 0;
     $discountPercent = isset($input['discount_percent']) ? (float)$input['discount_percent'] : 0;
     $applyLoyaltyDiscount = isset($input['apply_loyalty_discount']) ? (bool)$input['apply_loyalty_discount'] : false;
+
+    if(($discount > 0 || $discountPercent > 0 || $applyLoyaltyDiscount) && !in_array($admin['role'], ['admin', 'superadmin'])){
+        respond('error', 'Unauthorized. Only admins can apply discounts.');
+    }
     
     if(!is_array($items) || count($items) == 0){
         respond('error', 'At least one item is required.');
@@ -2310,9 +2323,7 @@ function deleteOrder(){
     $admin = getAdmin();
     
     // Only superadmin can delete orders
-    if($admin['role'] != 'superadmin'){
-        respond('error', 'Unauthorized. Only superadmin can delete orders.');
-    }
+   
     
     $input = requireParams(['id']);
     $id = $input['id'];
@@ -2356,9 +2367,6 @@ function deleteOrderItems(){
     $admin = getAdmin();
     
     // Only superadmin can delete order items
-    if($admin['role'] != 'superadmin'){
-        respond('error', 'Unauthorized. Only superadmin can delete order items.');
-    }
     
     $input = requireParams(['order_item_id']);
     $order_item_id = (int)$input['order_item_id'];
@@ -2468,9 +2476,7 @@ function updateOrderItem(){
     $admin = getAdmin();
     
     // Only superadmin can update order items
-    if($admin['role'] != 'superadmin'){
-        respond('error', 'Unauthorized. Only superadmin can update order items.');
-    }
+   
     
     $input = requireParams(['order_item_id', 'quantity']);
     $order_item_id = (int)$input['order_item_id'];
@@ -4258,7 +4264,7 @@ function getBooking(){
     // Only superadmin can cancel. Regular admin cannot cancel any booking.
     // This prevents abuse while ensuring superadmin can always clean up.
     if($admin['role'] != 'superadmin'){
-        respond('error', 'Unauthorized. Only superadmin can cancel bookings.');
+        respond('error', 'لايمكنك إلغاء الحجز. فقط المشرف الأعلى يمكنه ذلك.');
     }
     
     // Free the room
